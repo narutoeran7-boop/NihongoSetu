@@ -257,3 +257,20 @@ export function getKanjiForLevel(level: string): KanjiCardItem[] {
 }
 
 export { KANJI_DATA, KANJI_READING_EXAMPLES };
+
+// ==============================================================================
+// MODULAR DATA LAYER BRIDGE (STEP 2)
+// ==============================================================================
+export {
+  N5_KANJI,
+  N4_KANJI,
+  N3_KANJI,
+  N2_KANJI,
+  N1_KANJI,
+  getAllModularKanji,
+  getModularKanjiForLevel,
+  getModularKanjiByChar,
+  searchModularKanji,
+  kanjiEntryToCardItem,
+} from "./kanji/index";
+

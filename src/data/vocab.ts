@@ -680,3 +680,20 @@ export const VOCAB_TARGET_COUNTS = {
   N2: 6000,
   N1: 10000,
 };
+
+
+// ==============================================================================
+// MODULAR DATA LAYER BRIDGE (STEP 2)
+// ==============================================================================
+export {
+  N5_VOCABULARY,
+  N4_VOCABULARY,
+  N3_VOCABULARY,
+  N2_VOCABULARY,
+  N1_VOCABULARY,
+  getAllModularVocab,
+  getModularVocabForLevel,
+  getModularVocabByWord,
+  searchModularVocab,
+  vocabularyEntryToMultilingualWord,
+} from "./vocab/index";

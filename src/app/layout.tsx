@@ -5,6 +5,11 @@ import { AuthProvider } from "@/lib/auth/authContext";
 export const metadata: Metadata = {
   title: "NihongoSetu — 日本語節 | Your Bridge to Japanese",
   description: "Cross-device Japanese language learning platform bridging linguistic and cultural paths.",
+  manifest: "/manifest.json",
+  icons: {
+    icon: "/icon.png",
+    apple: "/apple-icon.png",
+  },
 };
 
 export default function RootLayout({
@@ -20,4 +25,3 @@ export default function RootLayout({
     </html>
   );
 }
-
