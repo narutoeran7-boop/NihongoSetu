@@ -5,7 +5,7 @@
   "start_url": "/",
   "display": "standalone",
   "orientation": "portrait-primary",
-  "background_color": "#0A1128",
+  "background_color": "#030F27",
   "theme_color": "#C83C50",
   "lang": "ja",
   "icons": [
@@ -39,6 +39,21 @@
       "type": "image/png",
       "purpose": "any"
     }
+  ],
+  "screenshots": [
+    {
+      "src": "/splash/splash-portrait.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow",
+      "label": "NihongoSetu Launch Screen"
+    },
+    {
+      "src": "/splash/splash-landscape.png",
+      "sizes": "1920x1080",
+      "type": "image/png",
+      "form_factor": "wide",
+      "label": "NihongoSetu Desktop Launch Screen"
+    }
   ]
 }
-
