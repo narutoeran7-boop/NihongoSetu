@@ -13,4 +13,5 @@ Thumbs.db
 next-env.d.ts
 *.tsbuildinfo
 AGENTS.md
+push-to-github.*
 
