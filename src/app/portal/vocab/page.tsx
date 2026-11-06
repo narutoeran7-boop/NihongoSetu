@@ -22,6 +22,7 @@ import {
   Info,
 } from "lucide-react";
 import { LANGUAGES } from "@/components/public/Navbar";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
 
 const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
 
@@ -39,8 +40,8 @@ const CATEGORIES = [
 ];
 
 export default function VocabularyVaultPage() {
+  const { language: selectedLang, setLanguage, t } = useLanguage();
   const [activeLevel, setActiveLevel] = useState("N5");
-  const [selectedLang, setSelectedLang] = useState(() => getStudentProfile().nativeLanguage || "en");
   const [activeCategory, setActiveCategory] = useState("All");
   const [searchQuery, setSearchQuery] = useState("");
   const [showRomaji, setShowRomaji] = useState(true);
@@ -180,7 +181,7 @@ export default function VocabularyVaultPage() {
           <span className="text-xs text-[#E8E0D5]/70 font-medium">Definition Lang:</span>
           <select
             value={selectedLang}
-            onChange={(e) => setSelectedLang(e.target.value)}
+            onChange={(e) => setLanguage(e.target.value as any)}
             className="bg-[#101C35] border border-[#E8E0D5]/25 rounded-lg px-2.5 py-1 text-xs text-[#FFFFFF] focus:outline-none focus:border-[#C83C50]"
           >
             {LANGUAGES.map((l) => (

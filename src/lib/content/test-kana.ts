@@ -11,7 +11,7 @@ import {
   ALL_KANA,
   GOJUON_ROWS,
 } from "../../data/kana";
-import { HIRAGANA_STROKE_DATA, KATAKANA_STROKE_DATA } from "../../data/kanaStrokes";
+import { HIRAGANA_STROKE_DATA, KATAKANA_STROKE_DATA, getKanaStrokes } from "../../data/kanaStrokes";
 
 let totalTests = 0;
 let passedTests = 0;
@@ -122,8 +122,43 @@ assert(
   `Got ${Object.keys(KATAKANA_STROKE_DATA).length} characters`
 );
 
+// 8. Explicit Character Stroke Checks (MEXT Standards)
+console.log("\n[8. Explicit Character Stroke Checks]");
+const hiraExpectedCounts: Record<string, number> = {
+  "あ": 3, "い": 2, "う": 2, "え": 2, "お": 3,
+  "き": 4, "さ": 3, "ち": 2, "ふ": 4, "ん": 1,
+};
+Object.entries(hiraExpectedCounts).forEach(([char, count]) => {
+  const strokes = getKanaStrokes(char, "hira");
+  assert(
+    `Hiragana '${char}' has exactly ${count} strokes (MEXT)`,
+    strokes.length === count,
+    `Got ${strokes.length}`
+  );
+});
+
+// 9. All 113 Kana Stroke Engine Coverage
+console.log("\n[9. Full 113 Kana Stroke Engine Validation]");
+let allHiraStrokesMatch = true;
+let allKataStrokesMatch = true;
+ALL_KANA.forEach((item) => {
+  const hStrokes = getKanaStrokes(item.hira, "hira");
+  if (!hStrokes || hStrokes.length !== item.strokes.hira) {
+    allHiraStrokesMatch = false;
+    console.error(`  Mismatch hira '${item.hira}': expected ${item.strokes.hira}, got ${hStrokes ? hStrokes.length : 0}`);
+  }
+  const kStrokes = getKanaStrokes(item.kata, "kata");
+  if (!kStrokes || kStrokes.length !== item.strokes.kata) {
+    allKataStrokesMatch = false;
+    console.error(`  Mismatch kata '${item.kata}': expected ${item.strokes.kata}, got ${kStrokes ? kStrokes.length : 0}`);
+  }
+});
+assert("All 113 Hiragana characters have exact matching stroke sequences", allHiraStrokesMatch);
+assert("All 113 Katakana characters have exact matching stroke sequences", allKataStrokesMatch);
+
 console.log(`\n=== KANA TEST RESULTS: ${passedTests}/${totalTests} TESTS PASSED ===\n`);
 
 if (passedTests !== totalTests) {
   process.exit(1);
 }
+

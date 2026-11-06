@@ -34,7 +34,7 @@ export default function PublicFooter() {
             <ul className="space-y-2 text-sm text-[#E8E0D5]/80">
               <li>
                 <Link href="/portal/kana" className="hover:text-[#FFFFFF] transition-colors">
-                  Kana Studio & Writing
+                  Japanese Script & Writing
                 </Link>
               </li>
               <li>

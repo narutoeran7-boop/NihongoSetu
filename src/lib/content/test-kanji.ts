@@ -136,7 +136,7 @@ console.log("\n[9. Stroke Animation Coverage]");
 let strokeDataAvailable = true;
 N5_KANJI.forEach((k) => {
   const strokes = getKanjiStrokeData(k.character, k.strokeCount);
-  if (!strokes || strokes.strokes.length !== k.strokeCount) {
+  if (!strokes || strokes.length !== k.strokeCount) {
     strokeDataAvailable = false;
   }
 });

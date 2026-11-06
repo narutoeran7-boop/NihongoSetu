@@ -19,8 +19,10 @@ export interface TranslationMap {
   [key: string]: string | undefined;
 }
 
-export const T: Record<string, TranslationMap> = {en:{home:"Home",account:"Account",kana:"Basic",grammar:"Grammar",vocab:"Vocabulary",kanji:"Kanji",listen:"Listening",mock:"Mock Test",videos:"Video Lessons",levels:"Levels",exam:"Exam",sensei:"Sensei",tag:"Your Bridge to Japanese.",streak:"Day streak",cont:"Start learning",mean:"What does this word mean?"},
-ta:{home:"முகப்பு",kana:"அடிப்படை",grammar:"இலக்கணம்",vocab:"சொற்களஞ்சியம்",kanji:"காஞ்சி",listen:"கேட்டல்",mock:"மாதிரித் தேர்வு",videos:"வீடியோ பாடங்கள்",levels:"நிலைகள்",exam:"தேர்வு",sensei:"சென்செய்",tag:"ஜப்பானிய மொழிக்கான உங்கள் பாலம்.",streak:"தொடர் நாட்கள்",cont:"கற்கத் தொடங்குங்கள்",mean:"இந்த வார்த்தையின் பொருள் என்ன?"},
+export const T: Record<string, TranslationMap> = {
+ja:{home:"ホーム",account:"アカウント",kana:"日本語の文字",grammar:"文法",vocab:"単語",kanji:"漢字",listen:"リスニング",mock:"模擬試験",videos:"動画レッスン",levels:"レベル",exam:"試験",sensei:"先生",tag:"日本語への架け橋",streak:"日連続学習",cont:"学習を始める",mean:"この言葉の意味は何ですか？"},
+en:{home:"Home",account:"Account",kana:"Japanese Script",grammar:"Grammar",vocab:"Vocabulary",kanji:"Kanji",listen:"Listening",mock:"Mock Test",videos:"Video Lessons",levels:"Levels",exam:"Exam",sensei:"Sensei",tag:"Your Bridge to Japanese.",streak:"Day streak",cont:"Start learning",mean:"What does this word mean?"},
+ta:{home:"முகப்பு",account:"கணக்கு",kana:"ஜப்பானிய எழுத்துகள்",grammar:"இலக்கணம்",vocab:"சொற்களஞ்சியம்",kanji:"காஞ்சி",listen:"கேட்டல்",mock:"மாதிரித் தேர்வு",videos:"வீடியோ பாடங்கள்",levels:"நிலைகள்",exam:"தேர்வு",sensei:"சென்செய்",tag:"ஜப்பானிய மொழிக்கான உங்கள் பாலம்.",streak:"தொடர் நாட்கள்",cont:"கற்கத் தொடங்குங்கள்",mean:"இந்த வார்த்தையின் பொருள் என்ன?"},
 hi:{home:"होम",kana:"बुनियादी",vocab:"शब्दावली",kanji:"कांजी",levels:"स्तर",exam:"परीक्षा",sensei:"सेंसेई",tag:"जापानी की ओर आपका सेतु।",streak:"लगातार सीखने के दिन",cont:"सीखना शुरू करें",mean:"इस शब्द का अर्थ क्या है?"},
 te:{home:"హోమ్",kana:"ప్రాథమికం",vocab:"పదజాలం",kanji:"కాంజి",levels:"స్థాయిలు",exam:"పరీక్ష",sensei:"సెన్సే",tag:"జపనీస్ నేర్చుకునే మీ వారధి.",streak:"వరుసగా నేర్చుకున్న రోజులు",cont:"నేర్చుకోవడం ప్రారంభించండి",mean:"ఈ పదానికి అర్థం ఏమిటి?"},
 ml:{home:"ഹോം",kana:"അടിസ്ഥാനം",vocab:"പദാവലി",kanji:"കാഞ്ചി",levels:"നിലകൾ",exam:"പരീക്ഷ",sensei:"സെൻസെയ്",tag:"ജാപ്പനീസ് പഠനത്തിലേക്കുള്ള നിങ്ങളുടെ പാലം.",streak:"തുടർച്ചയായ പഠന ദിവസങ്ങൾ",cont:"പഠനം ആരംഭിക്കുക",mean:"ഈ വാക്കിന്റെ അർത്ഥം എന്താണ്?"},
@@ -31,8 +33,9 @@ tl:{home:"Home",kana:"Basic",vocab:"Talasalitaan",kanji:"Kanji",levels:"Mga Anta
 ar:{home:"الرئيسية",kana:"أساسي",vocab:"المفردات",kanji:"كانجي",levels:"المستويات",exam:"الاختبار",sensei:"سينسي",tag:"جسرك لتعلّم اللغة اليابانية.",streak:"أيام التعلّم المتتالية",cont:"ابدأ التعلّم",mean:"ما معنى هذه الكلمة؟"},
 fr:{home:"Accueil",kana:"Bases",vocab:"Vocabulaire",kanji:"Kanji",levels:"Niveaux",exam:"Examen",sensei:"Sensei",tag:"Votre passerelle vers le japonais.",streak:"Jours d’apprentissage consécutifs",cont:"Commencer à apprendre",mean:"Que signifie ce mot ?"},
 es:{home:"Inicio",kana:"Básico",vocab:"Vocabulario",kanji:"Kanji",levels:"Niveles",exam:"Examen",sensei:"Sensei",tag:"Tu puente para aprender japonés.",streak:"Días seguidos de aprendizaje",cont:"Empezar a aprender",mean:"¿Qué significa esta palabra?"}};;
-export const LISTEN_LABELS={en:"Listening",ta:"கேட்டல்",hi:"सुनना",te:"వినడం",ml:"കേൾവി",kn:"ಆಲಿಸುವಿಕೆ",bn:"শোনা",mr:"ऐकणे",tl:"Pakikinig",ar:"الاستماع",fr:"Écoute",es:"Escucha"};
+export const LISTEN_LABELS: Record<string, string> = {ja:"リスニング",en:"Listening",ta:"கேட்டல்",hi:"सुनना",te:"వినడం",ml:"കേൾവി",kn:"ಆಲಿಸುವಿಕೆ",bn:"শোনা",mr:"ऐकणे",tl:"Pakikinig",ar:"الاستماع",fr:"Écoute",es:"Escucha"};
 export const LISTEN_TEXT: Record<string, string[]> = {
+ja:["日本語リスニング練習","文を聞いて、速度を調整し、意味を選択してください。","▶ 再生","🐢 ゆっくり","テキストを表示","テキストを隠す","意味は何ですか？","答えを確認","正解です！よくできました。","不正解です。もう一度聞いてみましょう。","先に回答を選択してください。"],
 en:["Japanese Listening Practice","Listen to a sentence, change the speed, then choose its meaning.","▶ Play","🐢 Slow","Show transcript","Hide transcript","What does it mean?","Check answer","Correct! Well done.","Not quite. Listen again.","Choose an answer first."],
 ta:["ஜப்பானிய கேட்புப் பயிற்சி","வாக்கியத்தைக் கேட்டு, வேகத்தை மாற்றி, அதன் பொருளைத் தேர்ந்தெடுக்கவும்.","▶ கேள்","🐢 மெதுவாகக் கேள்","வாக்கியத்தைக் காட்டு","வாக்கியத்தை மறை","இதன் பொருள் என்ன?","பதிலைச் சரிபார்","சரி! நன்றாகக் கேட்டீர்கள்.","சரியில்லை. மீண்டும் கேளுங்கள்.","முதலில் பதிலைத் தேர்ந்தெடுக்கவும்."],
 hi:["जापानी सुनने का अभ्यास","वाक्य सुनें, गति बदलें और उसका अर्थ चुनें।","▶ सुनें","🐢 धीरे सुनें","वाक्य दिखाएँ","वाक्य छिपाएँ","इसका अर्थ क्या है?","उत्तर जाँचें","सही! बहुत अच्छा।","सही नहीं। फिर से सुनें।","पहले उत्तर चुनें।"],

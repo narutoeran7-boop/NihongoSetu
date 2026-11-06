@@ -11,14 +11,16 @@ import {
   KanaCategory,
 } from "@/data/kana";
 import KanaStrokePlayer from "@/components/kana/KanaStrokePlayer";
-import { PenTool, Volume2 } from "lucide-react";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
+import { PenTool } from "lucide-react";
 
-export default function KanaStudioPage() {
+export default function JapaneseScriptPage() {
+  const { t } = useLanguage();
   const [scriptType, setScriptType] = useState<"hira" | "kata">("hira");
   const [category, setCategory] = useState<KanaCategory>("basic");
   const [selectedKana, setSelectedKana] = useState<KanaItem>(BASIC_KANA[0]);
 
-  // Audio Pronunciation using native browser speech synthesis
+  // Audio Pronunciation using native browser speech synthesis with ja-JP
   const speakKana = useCallback((text: string) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
     try {
@@ -32,6 +34,24 @@ export default function KanaStudioPage() {
     }
   }, []);
 
+  // Category switch with synchronized selection
+  const handleCategorySwitch = (cat: KanaCategory) => {
+    setCategory(cat);
+    if (cat === "basic") {
+      setSelectedKana(BASIC_KANA[0]);
+      speakKana(scriptType === "hira" ? BASIC_KANA[0].hira : BASIC_KANA[0].kata);
+    } else if (cat === "dakuon") {
+      setSelectedKana(DAKUON_KANA[0]);
+      speakKana(scriptType === "hira" ? DAKUON_KANA[0].hira : DAKUON_KANA[0].kata);
+    } else if (cat === "yoon") {
+      setSelectedKana(YOON_KANA[0]);
+      speakKana(scriptType === "hira" ? YOON_KANA[0].hira : YOON_KANA[0].kata);
+    } else if (cat === "small") {
+      setSelectedKana(SMALL_KANA[0]);
+      speakKana(scriptType === "hira" ? SMALL_KANA[0].hira : SMALL_KANA[0].kata);
+    }
+  };
+
   const activeChar = scriptType === "hira" ? selectedKana.hira : selectedKana.kata;
   const strokeCount = scriptType === "hira" ? selectedKana.strokes.hira : selectedKana.strokes.kata;
 
@@ -42,37 +62,43 @@ export default function KanaStudioPage() {
         <div>
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#C83C50]/20 text-[#C83C50] text-xs font-semibold mb-2 border border-[#C83C50]/30">
             <PenTool className="w-3.5 h-3.5" />
-            <span>かな練習 · Kana Studio</span>
+            <span>{t("script_badge")}</span>
           </div>
           <h1 className="text-3xl font-extrabold text-[#FFFFFF]">
-            日本語のかなと正しい書き順
+            {t("script_page_title")}
           </h1>
-          <p className="text-xs text-[#E8E0D5]/70 mt-1">
-            ひらがな・カタカナの発音、ローマ字、正しい書き順と画数を学び、キャンバスで練習しましょう。
+          <p className="text-xs text-[#E8E0D5]/70 mt-1 max-w-2xl leading-relaxed">
+            {t("script_page_subtitle")}
           </p>
         </div>
 
-        {/* Script Switcher (ひらがな / カタカナ) */}
+        {/* Script Switcher (Hiragana / Katakana) */}
         <div className="flex items-center bg-[#101C35] p-1.5 rounded-2xl border border-[#E8E0D5]/20 shrink-0">
           <button
-            onClick={() => setScriptType("hira")}
+            onClick={() => {
+              setScriptType("hira");
+              speakKana(selectedKana.hira);
+            }}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
               scriptType === "hira"
                 ? "bg-[#C83C50] text-[#FFFFFF] shadow-lg shadow-[#C83C50]/30"
                 : "text-[#E8E0D5]/70 hover:text-[#FFFFFF]"
             }`}
           >
-            ひらがな (Hiragana)
+            {t("script_hiragana")}
           </button>
           <button
-            onClick={() => setScriptType("kata")}
+            onClick={() => {
+              setScriptType("kata");
+              speakKana(selectedKana.kata);
+            }}
             className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
               scriptType === "kata"
                 ? "bg-[#C83C50] text-[#FFFFFF] shadow-lg shadow-[#C83C50]/30"
                 : "text-[#E8E0D5]/70 hover:text-[#FFFFFF]"
             }`}
           >
-            カタカナ (Katakana)
+            {t("script_katakana")}
           </button>
         </div>
       </div>
@@ -92,53 +118,53 @@ export default function KanaStudioPage() {
 
         {/* Right Column: Character Selection Tables (7 cols) */}
         <div className="lg:col-span-7 bg-[#101C35] border border-[#E8E0D5]/20 rounded-3xl p-6 sm:p-7 space-y-6 shadow-2xl">
-          {/* Category Tabs in Authentic Japanese */}
+          {/* Category Tabs */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#E8E0D5]/15 pb-4">
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
               <button
-                onClick={() => setCategory("basic")}
+                onClick={() => handleCategorySwitch("basic")}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
                   category === "basic"
                     ? "bg-[#C83C50] text-[#FFFFFF] shadow"
                     : "text-[#E8E0D5]/70 hover:bg-[#E8E0D5]/10"
                 }`}
               >
-                基本 (46)
+                {t("script_cat_basic")}
               </button>
               <button
-                onClick={() => setCategory("dakuon")}
+                onClick={() => handleCategorySwitch("dakuon")}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
                   category === "dakuon"
                     ? "bg-[#C83C50] text-[#FFFFFF] shadow"
                     : "text-[#E8E0D5]/70 hover:bg-[#E8E0D5]/10"
                 }`}
               >
-                濁音・半濁音 (25)
+                {t("script_cat_dakuon")}
               </button>
               <button
-                onClick={() => setCategory("yoon")}
+                onClick={() => handleCategorySwitch("yoon")}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
                   category === "yoon"
                     ? "bg-[#C83C50] text-[#FFFFFF] shadow"
                     : "text-[#E8E0D5]/70 hover:bg-[#E8E0D5]/10"
                 }`}
               >
-                拗音 (33)
+                {t("script_cat_yoon")}
               </button>
               <button
-                onClick={() => setCategory("small")}
+                onClick={() => handleCategorySwitch("small")}
                 className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all ${
                   category === "small"
                     ? "bg-[#C83C50] text-[#FFFFFF] shadow"
                     : "text-[#E8E0D5]/70 hover:bg-[#E8E0D5]/10"
                 }`}
               >
-                小さいかな (9)
+                {t("script_cat_small")}
               </button>
             </div>
 
             <span className="text-xs text-[#E8E0D5]/50 hidden sm:inline">
-              文字を選んで練習しましょう
+              {t("script_select_prompt")}
             </span>
           </div>
 
@@ -146,11 +172,11 @@ export default function KanaStudioPage() {
           {category === "basic" && (
             <div className="space-y-4">
               <div className="grid grid-cols-5 gap-2 text-center text-[11px] font-bold text-[#E8E0D5]/60 pb-1 border-b border-[#E8E0D5]/10">
-                <span>あ段 (a)</span>
-                <span>い段 (i)</span>
-                <span>う段 (u)</span>
-                <span>え段 (e)</span>
-                <span>お段 (o)</span>
+                <span>{t("col_a")}</span>
+                <span>{t("col_i")}</span>
+                <span>{t("col_u")}</span>
+                <span>{t("col_e")}</span>
+                <span>{t("col_o")}</span>
               </div>
 
               <div className="space-y-2">

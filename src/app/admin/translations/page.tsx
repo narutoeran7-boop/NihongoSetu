@@ -35,7 +35,7 @@ export default function AdminTranslationsCMSPage() {
 
   const keysToEdit = [
     { key: "home", label: "Home Navigation" },
-    { key: "kana", label: "Basic / Kana Studio" },
+    { key: "kana", label: "Japanese Script" },
     { key: "grammar", label: "Grammar Decks" },
     { key: "vocab", label: "Vocabulary Vault" },
     { key: "kanji", label: "Kanji Vault" },

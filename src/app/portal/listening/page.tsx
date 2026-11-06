@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { LISTEN_ITEMS, LISTEN_TEXT, ListenItem } from "@/data/translations";
 import { getStudentProfile } from "@/lib/storage/studentState";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
 import {
   Headphones,
   Play,
@@ -17,7 +18,7 @@ import {
 } from "lucide-react";
 
 export default function ListeningStudioPage() {
-  const [lang] = useState(() => getStudentProfile().nativeLanguage || "en");
+  const { language: lang, t } = useLanguage();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [showTranscript, setShowTranscript] = useState(false);

@@ -309,3 +309,4 @@ export default function KanjiStrokePlayer({
     </div>
   );
 }
+

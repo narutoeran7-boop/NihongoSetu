@@ -16,10 +16,12 @@ import {
 } from "lucide-react";
 import { KANJI_DATA } from "@/data/kanji";
 import { CORE_VOCABULARY } from "@/data/vocab";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
 
 const JLPT_LEVELS = ["N5", "N4", "N3", "N2", "N1"];
 
 export default function StudentProfilePage() {
+  const { t } = useLanguage();
   const [profile, setProfile] = useState<StudentProfile>(() => getStudentProfile());
   const [name, setName] = useState(() => getStudentProfile().name || "Japanese Learner");
   const [targetLevel, setTargetLevel] = useState(() => getStudentProfile().targetLevel || "N5");
@@ -50,13 +52,13 @@ export default function StudentProfilePage() {
       <div>
         <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#C83C50]/20 text-[#C83C50] text-xs font-semibold mb-2 border border-[#C83C50]/30">
           <User className="w-3.5 h-3.5" />
-          <span>Learner Identity & Transcripts</span>
+          <span>{t("profile_badge")}</span>
         </div>
         <h1 className="text-3xl font-extrabold text-[#FFFFFF]">
-          Student Profile & Study Records
+          {t("profile_title")}
         </h1>
         <p className="text-xs text-[#E8E0D5]/70 mt-1">
-          Review your cumulative JLPT milestones, exam scores, and customize your study preferences.
+          {t("profile_subtitle")}
         </p>
       </div>
 
@@ -104,7 +106,7 @@ export default function StudentProfilePage() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-semibold text-[#E8E0D5] mb-1.5">
-                Display Name
+                {t("profile_display_name")}
               </label>
               <input
                 type="text"
@@ -116,7 +118,7 @@ export default function StudentProfilePage() {
 
             <div>
               <label className="block text-xs font-semibold text-[#E8E0D5] mb-1.5">
-                Target JLPT Certification Level
+                {t("profile_target_level")}
               </label>
               <select
                 value={targetLevel}
@@ -138,7 +140,7 @@ export default function StudentProfilePage() {
               className="px-5 py-2.5 rounded-xl bg-[#C83C50] hover:bg-[#B03244] text-[#FFFFFF] text-xs font-bold flex items-center space-x-2 transition-all shadow-md shadow-[#C83C50]/20"
             >
               <Save className="w-4 h-4" />
-              <span>Save Changes</span>
+              <span>{t("profile_save_btn")}</span>
             </button>
           </div>
         </form>

@@ -8,6 +8,7 @@ import {
 } from "@/data/kanji";
 import { getStudentProfile, toggleLearnedKanji } from "@/lib/storage/studentState";
 import KanjiStrokePlayer from "@/components/kanji/KanjiStrokePlayer";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
 import {
   Sparkles,
   Search,
@@ -21,6 +22,7 @@ import {
 const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
 
 export default function KanjiVaultPage() {
+  const { language, t } = useLanguage();
   const [activeLevel, setActiveLevel] = useState("N5");
   const [searchQuery, setSearchQuery] = useState("");
   const [learnedKanji, setLearnedKanji] = useState<string[]>(() => getStudentProfile().learnedKanji || []);
@@ -92,13 +94,21 @@ export default function KanjiVaultPage() {
         <div>
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#C83C50]/20 text-[#C83C50] text-xs font-semibold mb-2 border border-[#C83C50]/30">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Kanji Vault Mastery · 漢字マスター</span>
+            <span>{t("nav_kanji")}</span>
           </div>
           <h1 className="text-3xl font-extrabold text-[#FFFFFF]">
-            JLPT Kanji Explorer & Stroke Animator
+            {language === "ta"
+              ? "JLPT காஞ்சி ஆய்வகமும் எழுதும் முறையும்"
+              : language === "ja"
+              ? "JLPT漢字エクスプローラー・筆順アニメーション"
+              : "JLPT Kanji Explorer & Stroke Animator"}
           </h1>
           <p className="text-xs text-[#E8E0D5]/70 mt-1">
-            Authentic On&apos;yomi, Kun&apos;yomi readings, stroke-order animations, radicals, and Tamil translations.
+            {language === "ta"
+              ? "ஆன்'யோமி, குன்'யோமி வாசிப்புகள், கோட்டு அசைவூட்டம், வேர்கள் மற்றும் விரிவான தமிழ்ப் பொருள்."
+              : language === "ja"
+              ? "音読み・訓読み、画数、部首、SVG筆順アニメーションで漢字を視覚的に習得。"
+              : "Authentic On'yomi, Kun'yomi readings, stroke-order animations, radicals, and comprehensive vocabulary."}
           </p>
         </div>
 
@@ -157,7 +167,13 @@ export default function KanjiVaultPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search kanji, reading, or தமிழ் meaning..."
+            placeholder={
+              language === "ta"
+                ? "காஞ்சி, வாசிப்பு அல்லது தமிழ்ப் பொருளைத் தேடு..."
+                : language === "ja"
+                ? "漢字、読み、または意味を検索..."
+                : "Search kanji, reading, or English meaning..."
+            }
             className="w-full bg-[#101C35] border border-[#E8E0D5]/25 rounded-xl pl-10 pr-4 py-2 text-xs text-[#FFFFFF] placeholder-[#E8E0D5]/40 focus:outline-none focus:border-[#C83C50]"
           />
         </div>
@@ -200,13 +216,8 @@ export default function KanjiVaultPage() {
                     {item.character}
                   </span>
                   <span className="text-[10px] truncate max-w-full opacity-70">
-                    {item.meanings.split(";")[0]}
+                    {language === "ta" && rich?.meaningTa ? rich.meaningTa.split("/")[0] : item.meanings.split(";")[0]}
                   </span>
-                  {rich?.meaningTa && (
-                    <span className="text-[9px] text-[#C83C50] truncate max-w-full font-medium opacity-90">
-                      {rich.meaningTa.split("/")[0]}
-                    </span>
-                  )}
                 </button>
               );
             })}
@@ -261,10 +272,10 @@ export default function KanjiVaultPage() {
                 </div>
               </div>
 
-              {/* Verified Tamil Meaning Badge */}
-              {richEntry?.meaningTa && (
+              {/* Tamil Meaning Badge — Only when Tamil is the selected language */}
+              {language === "ta" && richEntry?.meaningTa && (
                 <div className="p-3 rounded-xl bg-[#C83C50]/10 border border-[#C83C50]/25 flex items-center justify-between text-xs">
-                  <span className="font-semibold text-[#E8E0D5]/80">தமிழ் பொருள்:</span>
+                  <span className="font-semibold text-[#E8E0D5]/80">தமிழ்ப் பொருள்:</span>
                   <span className="font-bold text-[#FFFFFF] text-sm">{richEntry.meaningTa}</span>
                 </div>
               )}
@@ -390,7 +401,7 @@ export default function KanjiVaultPage() {
                                 {comp.meaningEn}
                               </span>
                             </div>
-                            {comp.meaningTa && (
+                            {language === "ta" && comp.meaningTa && (
                               <span className="text-[10px] text-[#C83C50] font-medium ml-2 shrink-0">
                                 {comp.meaningTa}
                               </span>

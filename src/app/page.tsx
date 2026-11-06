@@ -97,21 +97,21 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {/* Feature 1: Kana Studio */}
+            {/* Feature 1: Japanese Script */}
             <div className="p-8 rounded-2xl bg-[#FFFFFF]/5 border border-[#E8E0D5]/15 hover:border-[#C83C50]/50 transition-all group flex flex-col justify-between">
               <div>
                 <div className="w-12 h-12 rounded-xl bg-[#C83C50]/15 border border-[#C83C50]/30 flex items-center justify-center text-[#C83C50] mb-6 group-hover:scale-110 transition-transform">
                   <PenTool className="w-6 h-6" />
                 </div>
                 <h4 className="text-lg font-bold text-[#FFFFFF] mb-2">
-                  Retina Kana Studio
+                  Japanese Script & Stroke Order
                 </h4>
                 <p className="text-sm text-[#E8E0D5]/80 leading-relaxed mb-4">
-                  Learn all 46 basic syllables, dakuon, and yoon for both Hiragana and Katakana. Practice stroke orders interactively on an in-browser high-DPI canvas.
+                  Learn all 46 basic syllables, dakuon, and yōon for both Hiragana and Katakana. Practice authentic stroke orders interactively on an in-browser high-DPI canvas.
                 </p>
               </div>
               <Link href="/portal/kana" className="text-xs font-semibold text-[#C83C50] flex items-center space-x-1 group-hover:underline">
-                <span>Start Kana Practice</span>
+                <span>Start Script Practice</span>
                 <ArrowRight className="w-3.5 h-3.5" />
               </Link>
             </div>

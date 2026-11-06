@@ -2,27 +2,48 @@
 
 import React, { useState, useMemo } from "react";
 import { getGrammarForLevel, GrammarItem } from "@/data/grammar";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
 import {
   BookMarked,
   Search,
   Volume2,
   CheckCircle2,
   ChevronDown,
-  Sparkles,
   Info,
 } from "lucide-react";
 
 const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
 
-const LEVEL_DESCRIPTIONS: Record<string, string> = {
-  N5: "Foundational Japanese sentence structures, copulas (です), core particles (は, を, に, で, へ, と), polite verbs, and requests.",
-  N4: "Expressing obligations, permissions, simultaneous actions (〜ながら), reasons, and past experiences.",
-  N3: "Intermediate bridge: decisions (ことにする), habits, expectations (はずだ), causations, and contrasting aspects.",
-  N2: "Upper-intermediate nuances: inevitable outcomes (かねない), limits, perspectives, and formal discourse.",
-  N1: "Advanced literary expressions: emotional restraints, unique conditions, literary purposes, and abstract relationships.",
+const LEVEL_DESCRIPTIONS: Record<string, Record<string, string>> = {
+  N5: {
+    en: "Foundational Japanese sentence structures, copulas (です), core particles (は, を, に, で, へ, と), polite verbs, and requests.",
+    ta: "அடிப்படை ஜப்பானிய வாக்கிய அமைப்புகள், துணை வினைச்சொற்கள் (です), முக்கிய வேற்றுமை உருபுகள் (は, を, に, で, へ, と) மற்றும் எளிய கோரிக்கைகள்.",
+    ja: "日本語の基礎的な文型、助詞（は、を、に、で、へ、と）、丁寧形動詞、依頼表現の学習。",
+  },
+  N4: {
+    en: "Expressing obligations, permissions, simultaneous actions (〜ながら), reasons, and past experiences.",
+    ta: "கடமைகள், அனுமதிகள், ஒரே நேரத்தில் நிகழும் செயல்கள் (〜ながら), காரணங்கள் மற்றும் கடந்த கால அனுபவங்களை வெளிப்படுத்துதல்.",
+    ja: "義務、許可、同時進行（〜ながら）、理由、過去の経験の表現。",
+  },
+  N3: {
+    en: "Intermediate bridge: decisions (ことにする), habits, expectations (はずだ), causations, and contrasting aspects.",
+    ta: "இடைநிலை பாலம்: முடிவுகள் (ことにする), பழக்கவழக்கங்கள், எதிர்பார்ப்புகள் (はずだ) மற்றும் ஒப்பீடுகள்.",
+    ja: "中級への架け橋：意思決定（ことにする）、習慣、当然の予測（はずだ）、対比表現。",
+  },
+  N2: {
+    en: "Upper-intermediate nuances: inevitable outcomes (かねない), limits, perspectives, and formal discourse.",
+    ta: "மேல்-இடைநிலை நுணுக்கங்கள்: தவிர்க்க முடியாத விளைவுகள் (かねない), வரம்புகள் மற்றும் முறையான உரையாடல்கள்.",
+    ja: "上級直前のニュアンス：可能性（かねない）、限定、視点、公的文書表現。",
+  },
+  N1: {
+    en: "Advanced literary expressions: emotional restraints, unique conditions, literary purposes, and abstract relationships.",
+    ta: "முன்னேறிய இலக்கிய வெளிப்பாடுகள்: உணர்ச்சி கட்டுப்பாடுகள், தனித்துவமான நிபந்தனைகள் மற்றும் நுட்பமான உறவுகள்.",
+    ja: "高度な文章表現：感情の抑制、極限状態、慣用句、抽象的論理関係。",
+  },
 };
 
 export default function GrammarDecksPage() {
+  const { language, t } = useLanguage();
   const [activeLevel, setActiveLevel] = useState("N5");
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedIndex, setExpandedIndex] = useState<number | null>(0);
@@ -40,10 +61,10 @@ export default function GrammarDecksPage() {
         item.pattern.toLowerCase().includes(q) ||
         item.reading.toLowerCase().includes(q) ||
         item.meaning.toLowerCase().includes(q) ||
-        (item.meaningTa && item.meaningTa.toLowerCase().includes(q)) ||
+        (language === "ta" && item.meaningTa && item.meaningTa.toLowerCase().includes(q)) ||
         (item.formation && item.formation.toLowerCase().includes(q))
     );
-  }, [items, searchQuery]);
+  }, [items, searchQuery, language]);
 
   const speakJapanese = (text: string) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -64,6 +85,13 @@ export default function GrammarDecksPage() {
     );
   };
 
+  const searchPlaceholder =
+    language === "ta"
+      ? "இலக்கண அமைப்பைத் தேடுக..."
+      : language === "ja"
+      ? "文法パターン、接続、意味を検索..."
+      : "Search grammar patterns, meaning, romaji...";
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -71,13 +99,21 @@ export default function GrammarDecksPage() {
         <div>
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#C83C50]/20 text-[#C83C50] text-xs font-semibold mb-2 border border-[#C83C50]/30">
             <BookMarked className="w-3.5 h-3.5" />
-            <span>JLPT Grammar Decks · 文法マスター</span>
+            <span>{t("nav_grammar")}</span>
           </div>
           <h1 className="text-3xl font-extrabold text-[#FFFFFF]">
-            Structured Grammar Mastery & Patterns
+            {language === "ta"
+              ? "JLPT இலக்கண அமைப்புகள் & பயிற்சி"
+              : language === "ja"
+              ? "体系的文法マスター・文型一覧"
+              : "Structured Grammar Mastery & Patterns"}
           </h1>
-          <p className="text-xs text-[#E8E0D5]/70 mt-1">
-            Browse authentic grammar rules from JLPT N5 to N1 with grammatical formations, Tamil explanations, and audio examples.
+          <p className="text-xs text-[#E8E0D5]/70 mt-1 max-w-2xl leading-relaxed">
+            {language === "ta"
+              ? "JLPT N5 முதல் N1 வரையிலான இலக்கண விதிகள், வாக்கிய அமைப்புகள் மற்றும் ஆடியோ மாதிரி வாக்கியங்கள்."
+              : language === "ja"
+              ? "JLPT N5〜N1の文法規則、接続、例文を学習します。"
+              : "Browse authentic grammar rules from JLPT N5 to N1 with grammatical formations and audio example sentences."}
           </p>
         </div>
 
@@ -111,16 +147,20 @@ export default function GrammarDecksPage() {
               JLPT {activeLevel}
             </span>
             <span className="text-xs text-[#E8E0D5]/80 font-medium">
-              {filteredItems.length} Patterns in Deck
+              {filteredItems.length} {language === "ta" ? "அமைப்புகள்" : language === "ja" ? "項目" : "Patterns in Deck"}
             </span>
           </div>
           <p className="text-xs text-[#E8E0D5]/70">
-            {LEVEL_DESCRIPTIONS[activeLevel]}
+            {LEVEL_DESCRIPTIONS[activeLevel]?.[language] || LEVEL_DESCRIPTIONS[activeLevel]?.en}
           </p>
           <p className="text-[11px] text-[#E8E0D5]/50 flex items-center gap-1.5 pt-0.5">
             <Info className="w-3.5 h-3.5 shrink-0 text-[#C83C50]" />
             <span>
-              Curricular Reference Target (Estimate): Curricula organized based on standard Japanese language education benchmarks.
+              {language === "ta"
+                ? "பாடத்திட்ட குறிப்பு இலக்கு: நிலையான ஜப்பானிய மொழி கல்வி அளவுகோல்களின் அடிப்படையில் ஒழுங்கமைக்கப்பட்டது."
+                : language === "ja"
+                ? "標準的な日本語教育基準に基づきカリキュラムを構成しています。"
+                : "Curricular Reference Target: Curricula organized based on standard Japanese language education benchmarks."}
             </span>
           </p>
         </div>
@@ -132,7 +172,7 @@ export default function GrammarDecksPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search pattern, English, or தமிழ்..."
+            placeholder={searchPlaceholder}
             className="w-full bg-[#101C35] border border-[#E8E0D5]/25 rounded-xl pl-10 pr-4 py-2 text-xs text-[#FFFFFF] placeholder-[#E8E0D5]/40 focus:outline-none focus:border-[#C83C50]"
           />
         </div>
@@ -170,7 +210,7 @@ export default function GrammarDecksPage() {
                         ? "bg-emerald-500/20 text-emerald-400 border-emerald-500/40"
                         : "bg-[#E8E0D5]/5 text-[#E8E0D5]/40 border-[#E8E0D5]/10 hover:text-emerald-400"
                     }`}
-                    title={isMastered ? "Marked as Mastered" : "Mark as Mastered"}
+                    title={isMastered ? "Mastered" : "Mark as Mastered"}
                   >
                     <CheckCircle2 className="w-4 h-4" />
                   </button>
@@ -184,14 +224,10 @@ export default function GrammarDecksPage() {
                         [{item.reading}]
                       </span>
                     </div>
+                    {/* Localized Meaning */}
                     <p className="text-xs text-[#E8E0D5]/90 mt-1 leading-relaxed">
-                      {item.meaning}
+                      {language === "ta" && item.meaningTa ? item.meaningTa : item.meaning}
                     </p>
-                    {item.meaningTa && (
-                      <p className="text-xs text-[#C83C50] font-medium mt-0.5">
-                        தமிழ்: {item.meaningTa}
-                      </p>
-                    )}
                   </div>
                 </div>
 
@@ -203,7 +239,7 @@ export default function GrammarDecksPage() {
                       speakJapanese(item.exampleJp);
                     }}
                     className="p-2 rounded-xl bg-[#E8E0D5]/10 hover:bg-[#E8E0D5]/20 text-[#E8E0D5] transition-colors"
-                    title="Listen to Example Sentence"
+                    title={language === "ta" ? "மாதிரி வாக்கியத்தைக் கேட்கவும்" : language === "ja" ? "例文を聞く" : "Listen to Example Sentence"}
                   >
                     <Volume2 className="w-4 h-4 text-[#C83C50]" />
                   </button>
@@ -222,7 +258,7 @@ export default function GrammarDecksPage() {
                   {item.formation && (
                     <div className="p-3 rounded-xl bg-[#0B1323] border border-[#E8E0D5]/10 space-y-1 mt-3">
                       <div className="text-[10px] font-bold uppercase tracking-wider text-blue-400">
-                        Grammatical Formation & Connection · 接続
+                        {language === "ta" ? "இலக்கண அமைப்பு (Formation · 接続)" : language === "ja" ? "接続方法 (Formation)" : "Grammatical Formation & Connection · 接続"}
                       </div>
                       <div className="text-xs font-mono font-bold text-[#FFFFFF]">
                         {item.formation}
@@ -233,26 +269,21 @@ export default function GrammarDecksPage() {
                   {/* Example Sentence Box */}
                   <div className="p-4 rounded-xl bg-[#0B1323] border border-[#E8E0D5]/10 space-y-2">
                     <div className="text-[10px] font-bold uppercase tracking-wider text-[#C83C50] flex items-center justify-between">
-                      <span>Example Sentence · 例文</span>
+                      <span>{language === "ta" ? "மாதிரி வாக்கியம் · 例文" : language === "ja" ? "例文 (Example Sentence)" : "Example Sentence · 例文"}</span>
                       <button
                         onClick={() => speakJapanese(item.exampleJp)}
                         className="text-xs text-[#C83C50] hover:underline flex items-center space-x-1"
                       >
                         <Volume2 className="w-3.5 h-3.5" />
-                        <span>Play Audio</span>
+                        <span>{language === "ta" ? "ஆடியோவை இயக்கு" : language === "ja" ? "音声を再生" : "Play Audio"}</span>
                       </button>
                     </div>
                     <div className="text-base font-medium font-japanese text-[#FFFFFF]">
                       {item.exampleJp}
                     </div>
                     <div className="text-xs text-[#E8E0D5]/70 italic">
-                      &quot;{item.exampleEn}&quot;
+                      &quot;{language === "ta" && item.exampleTa ? item.exampleTa : item.exampleEn}&quot;
                     </div>
-                    {item.exampleTa && (
-                      <div className="text-xs text-[#C83C50]/90 font-medium">
-                        தமிழ்: {item.exampleTa}
-                      </div>
-                    )}
                   </div>
                 </div>
               )}

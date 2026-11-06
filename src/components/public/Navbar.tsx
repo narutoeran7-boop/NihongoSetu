@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Menu, X, Globe, User, BookOpen } from "lucide-react";
 import { T } from "@/data/translations";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
+import { SupportedLanguage } from "@/lib/i18n/translations";
 
 const NAV_LINKS = [
   { href: "/", label: "Home" },
@@ -23,6 +25,7 @@ export interface LanguageOption {
 export const LANGUAGES: LanguageOption[] = [
   { code: "en", name: "English" },
   { code: "ta", name: "தமிழ்" },
+  { code: "ja", name: "日本語" },
   { code: "hi", name: "हिन्दी" },
   { code: "te", name: "తెలుగు" },
   { code: "ml", name: "മലയാളം" },
@@ -38,7 +41,7 @@ export const LANGUAGES: LanguageOption[] = [
 export default function PublicNavbar() {
   const pathname = usePathname();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [activeLang, setActiveLang] = useState("en");
+  const { language: activeLang, setLanguage } = useLanguage();
   const [langMenuOpen, setLangMenuOpen] = useState(false);
 
   const t = T[activeLang] || T.en;
@@ -106,7 +109,7 @@ export default function PublicNavbar() {
                     <button
                       key={l.code}
                       onClick={() => {
-                        setActiveLang(l.code);
+                        setLanguage(l.code as SupportedLanguage);
                         setLangMenuOpen(false);
                       }}
                       className={`w-full text-left px-3 py-1.5 text-xs transition-colors ${
@@ -183,7 +186,7 @@ export default function PublicNavbar() {
           <div className="pt-3 border-t border-[#E8E0D5]/15 flex items-center justify-between">
             <select
               value={activeLang}
-              onChange={(e) => setActiveLang(e.target.value)}
+              onChange={(e) => setLanguage(e.target.value as SupportedLanguage)}
               className="bg-[#101C35] text-[#E8E0D5] text-xs border border-[#E8E0D5]/20 rounded-lg px-2.5 py-1.5"
             >
               {LANGUAGES.map((l) => (

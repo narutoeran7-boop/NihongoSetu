@@ -1,33 +1,33 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { getStudentProfile, saveStudentProfile, StudentProfile } from "@/lib/storage/studentState";
-import { LANGUAGES } from "@/components/public/Navbar";
+import { useLanguage } from "@/lib/i18n/LanguageContext";
+import { SupportedLanguage } from "@/lib/i18n/translations";
 import {
   Settings,
   Download,
   Upload,
-  Trash2,
   Globe,
   Database,
-  Smartphone,
   CheckCircle2,
   AlertTriangle,
   RotateCcw,
 } from "lucide-react";
 
 export default function StudentSettingsPage() {
+  const { language, setLanguage, t, languages } = useLanguage();
   const [profile, setProfile] = useState<StudentProfile>(() => getStudentProfile());
-  const [selectedLang, setSelectedLang] = useState(() => getStudentProfile().nativeLanguage || "en");
   const [statusMessage, setStatusMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
   const handleLanguageChange = (code: string) => {
-    setSelectedLang(code);
-    if (!profile) return;
-    const updated = { ...profile, nativeLanguage: code };
-    setProfile(updated);
-    saveStudentProfile(updated);
-    setStatusMessage({ type: "success", text: "Native language preference updated." });
+    setLanguage(code as SupportedLanguage);
+    if (profile) {
+      const updated = { ...profile, nativeLanguage: code };
+      setProfile(updated);
+      saveStudentProfile(updated);
+    }
+    setStatusMessage({ type: "success", text: t("settings_updated_msg") });
     setTimeout(() => setStatusMessage(null), 3000);
   };
 
@@ -41,7 +41,7 @@ export default function StudentSettingsPage() {
     downloadAnchor.click();
     downloadAnchor.remove();
 
-    setStatusMessage({ type: "success", text: "Backup file generated and downloaded successfully." });
+    setStatusMessage({ type: "success", text: t("settings_backup_success") });
     setTimeout(() => setStatusMessage(null), 3000);
   };
 
@@ -56,10 +56,12 @@ export default function StudentSettingsPage() {
         if (parsed.email && parsed.learnedKanji !== undefined) {
           saveStudentProfile(parsed);
           setProfile(parsed);
-          setSelectedLang(parsed.nativeLanguage || "en");
-          setStatusMessage({ type: "success", text: "Backup restored successfully!" });
+          if (parsed.nativeLanguage) {
+            setLanguage(parsed.nativeLanguage);
+          }
+          setStatusMessage({ type: "success", text: t("settings_restore_success") });
         } else {
-          setStatusMessage({ type: "error", text: "Invalid backup file structure." });
+          setStatusMessage({ type: "error", text: t("settings_restore_error") });
         }
       } catch {
         setStatusMessage({ type: "error", text: "Failed to parse JSON file." });
@@ -70,13 +72,13 @@ export default function StudentSettingsPage() {
   };
 
   const handleResetProgress = () => {
-    if (confirm("Are you sure you want to reset your study streak and mastered items? This cannot be undone.")) {
+    if (confirm(t("settings_reset_confirm"))) {
       const resetProfile: StudentProfile = {
         name: profile?.name || "Japanese Learner",
         email: profile?.email || "student@nihongosetu.org",
         role: "student",
         targetLevel: "N5",
-        nativeLanguage: selectedLang,
+        nativeLanguage: language,
         streak: 1,
         lastActive: new Date().toISOString(),
         learnedKanji: [],
@@ -96,172 +98,135 @@ export default function StudentSettingsPage() {
       <div>
         <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#C83C50]/20 text-[#C83C50] text-xs font-semibold mb-2 border border-[#C83C50]/30">
           <Settings className="w-3.5 h-3.5" />
-          <span>Preferences & Data Sovereignty</span>
+          <span>{t("settings_title")}</span>
         </div>
         <h1 className="text-3xl font-extrabold text-[#FFFFFF]">
-          Settings & Offline Storage
+          {t("nav_settings")}
         </h1>
         <p className="text-xs text-[#E8E0D5]/70 mt-1">
-          Manage native language display, export local study backups, and monitor active sessions.
+          {t("settings_subtitle")}
         </p>
       </div>
 
       {statusMessage && (
         <div
-          className={`p-4 rounded-2xl border text-xs font-semibold flex items-center space-x-2 shadow-lg ${
+          className={`p-4 rounded-2xl border flex items-center space-x-3 text-xs font-medium animate-fadeIn ${
             statusMessage.type === "success"
               ? "bg-emerald-500/15 border-emerald-500/30 text-emerald-300"
               : "bg-rose-500/15 border-rose-500/30 text-rose-300"
           }`}
         >
           {statusMessage.type === "success" ? (
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+            <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
           ) : (
-            <AlertTriangle className="w-4 h-4 text-rose-400 shrink-0" />
+            <AlertTriangle className="w-4 h-4 shrink-0 text-rose-400" />
           )}
           <span>{statusMessage.text}</span>
         </div>
       )}
 
       {/* Language Preference Section */}
-      <div className="bg-[#101C35] border border-[#E8E0D5]/20 rounded-3xl p-6 sm:p-8 space-y-4 shadow-xl">
-        <div className="flex items-center space-x-3 text-[#C83C50]">
-          <Globe className="w-5 h-5" />
-          <h2 className="text-base font-bold text-[#FFFFFF]">
-            1. Preferred Native Language
-          </h2>
+      <div className="bg-[#101C35] border border-[#E8E0D5]/20 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl">
+        <div className="flex items-center space-x-3 pb-4 border-b border-[#E8E0D5]/15">
+          <div className="w-10 h-10 rounded-xl bg-[#C83C50]/20 text-[#C83C50] flex items-center justify-center">
+            <Globe className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-[#FFFFFF]">
+              {t("settings_lang_heading")}
+            </h2>
+            <p className="text-xs text-[#E8E0D5]/70">
+              {t("settings_lang_desc")}
+            </p>
+          </div>
         </div>
-        <p className="text-xs text-[#E8E0D5]/70 leading-relaxed">
-          Select your native tongue. Vocabulary definitions, grammar descriptions, and exam navigation will reflect this setting.
-        </p>
 
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 pt-2">
-          {LANGUAGES.map((l) => (
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {languages.map((l) => (
             <button
               key={l.code}
               onClick={() => handleLanguageChange(l.code)}
-              className={`p-3 rounded-2xl border text-xs font-semibold text-left transition-all ${
-                selectedLang === l.code
-                  ? "bg-[#C83C50] text-[#FFFFFF] shadow-md shadow-[#C83C50]/20 border-transparent"
-                  : "bg-[#0B1323] text-[#E8E0D5] border-[#E8E0D5]/15 hover:border-[#E8E0D5]/30"
+              className={`p-4 rounded-2xl border text-left transition-all flex items-center justify-between ${
+                language === l.code
+                  ? "bg-[#C83C50]/20 border-[#C83C50] text-[#FFFFFF] shadow-lg shadow-[#C83C50]/15"
+                  : "bg-[#0B1323]/60 border-[#E8E0D5]/15 text-[#E8E0D5]/80 hover:bg-[#E8E0D5]/10 hover:border-[#E8E0D5]/30"
               }`}
             >
-              <div>{l.name}</div>
-              <div className="text-[10px] opacity-60 uppercase mt-0.5">{l.code}</div>
+              <div>
+                <div className="font-bold text-sm">{l.nativeName || l.name}</div>
+                <div className="text-[11px] text-[#E8E0D5]/60 mt-0.5">{l.name}</div>
+              </div>
+              {language === l.code && (
+                <div className="w-2.5 h-2.5 rounded-full bg-[#C83C50] shadow" />
+              )}
             </button>
           ))}
         </div>
       </div>
 
-      {/* Offline Data & Backup Section */}
-      <div className="bg-[#101C35] border border-[#E8E0D5]/20 rounded-3xl p-6 sm:p-8 space-y-6 shadow-xl">
-        <div className="flex items-center space-x-3 text-[#C83C50]">
-          <Database className="w-5 h-5" />
-          <h2 className="text-base font-bold text-[#FFFFFF]">
-            2. Offline Data Storage & JSON Backups
-          </h2>
+      {/* Backup and Restore Section */}
+      <div className="bg-[#101C35] border border-[#E8E0D5]/20 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl">
+        <div className="flex items-center space-x-3 pb-4 border-b border-[#E8E0D5]/15">
+          <div className="w-10 h-10 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center">
+            <Database className="w-5 h-5" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold text-[#FFFFFF]">
+              {t("settings_backup_heading")}
+            </h2>
+            <p className="text-xs text-[#E8E0D5]/70">
+              {t("settings_backup_desc")}
+            </p>
+          </div>
         </div>
-        <p className="text-xs text-[#E8E0D5]/70 leading-relaxed">
-          NihongoSetu operates offline-first. Your streak, mastered kanji, and mock test scores are stored locally on your device in <code className="text-[#C83C50] bg-[#0B1323] px-1 py-0.5 rounded">localStorage.nihongo_user</code> and the legacy <code className="text-[#C83C50] bg-[#0B1323] px-1 py-0.5 rounded">localStorage.ns</code>.
-        </p>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-          {/* Export */}
-          <div className="p-5 rounded-2xl bg-[#0B1323] border border-[#E8E0D5]/15 space-y-3">
-            <h3 className="text-xs font-bold text-[#FFFFFF] flex items-center space-x-2">
-              <Download className="w-4 h-4 text-[#C83C50]" />
-              <span>Export Progress Backup</span>
-            </h3>
-            <p className="text-[11px] text-[#E8E0D5]/70 leading-relaxed">
-              Download your complete student portfolio as a JSON file to transfer between devices or safeguard your history.
-            </p>
-            <button
-              onClick={handleExportBackup}
-              className="w-full py-2.5 px-4 rounded-xl bg-[#C83C50] hover:bg-[#B03244] text-[#FFFFFF] text-xs font-bold shadow-md shadow-[#C83C50]/20 transition-all flex items-center justify-center space-x-1.5"
-            >
-              <Download className="w-3.5 h-3.5" />
-              <span>Download JSON Backup</span>
-            </button>
-          </div>
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+          <button
+            onClick={handleExportBackup}
+            className="flex-1 py-3 px-4 rounded-xl bg-[#E8E0D5]/10 hover:bg-[#E8E0D5]/20 text-[#FFFFFF] text-xs font-semibold flex items-center justify-center space-x-2 border border-[#E8E0D5]/20 transition-colors"
+          >
+            <Download className="w-4 h-4 text-[#C83C50]" />
+            <span>{t("settings_export_btn")}</span>
+          </button>
 
-          {/* Import */}
-          <div className="p-5 rounded-2xl bg-[#0B1323] border border-[#E8E0D5]/15 space-y-3">
-            <h3 className="text-xs font-bold text-[#FFFFFF] flex items-center space-x-2">
-              <Upload className="w-4 h-4 text-blue-400" />
-              <span>Restore from Backup</span>
-            </h3>
-            <p className="text-[11px] text-[#E8E0D5]/70 leading-relaxed">
-              Upload a previously exported NihongoSetu JSON backup to restore your streaks, scores, and mastered items.
-            </p>
-            <label className="w-full py-2.5 px-4 rounded-xl bg-[#E8E0D5]/10 hover:bg-[#E8E0D5]/20 text-[#E8E0D5] text-xs font-bold transition-all flex items-center justify-center space-x-1.5 cursor-pointer border border-[#E8E0D5]/20">
-              <Upload className="w-3.5 h-3.5" />
-              <span>Select Backup File</span>
-              <input
-                type="file"
-                accept=".json"
-                onChange={handleImportBackup}
-                className="hidden"
-              />
-            </label>
-          </div>
+          <label className="flex-1 py-3 px-4 rounded-xl bg-[#E8E0D5]/10 hover:bg-[#E8E0D5]/20 text-[#FFFFFF] text-xs font-semibold flex items-center justify-center space-x-2 border border-[#E8E0D5]/20 cursor-pointer transition-colors">
+            <Upload className="w-4 h-4 text-blue-400" />
+            <span>{t("settings_import_btn")}</span>
+            <input
+              type="file"
+              accept=".json"
+              onChange={handleImportBackup}
+              className="hidden"
+            />
+          </label>
         </div>
       </div>
 
-      {/* Concurrent Device Management (Rule of 3) */}
-      <div className="bg-[#101C35] border border-[#E8E0D5]/20 rounded-3xl p-6 sm:p-8 space-y-4 shadow-xl">
-        <div className="flex items-center space-x-3 text-[#C83C50]">
-          <Smartphone className="w-5 h-5" />
-          <h2 className="text-base font-bold text-[#FFFFFF]">
-            3. Active Device Allocation (Maximum 3 Concurrent Devices)
-          </h2>
-        </div>
-        <p className="text-xs text-[#E8E0D5]/70 leading-relaxed">
-          Under institutional fair-use rules, a single student account may remain authorized on up to three concurrent devices.
-        </p>
-
-        <div className="space-y-2 pt-2">
-          <div className="p-3.5 rounded-xl bg-[#0B1323] border border-emerald-500/30 flex items-center justify-between text-xs">
-            <div className="flex items-center space-x-3">
-              <div className="w-2 h-2 rounded-full bg-emerald-400" />
-              <div>
-                <span className="font-bold text-[#FFFFFF]">This Device (Current Session)</span>
-                <p className="text-[10px] text-[#E8E0D5]/60">Windows Desktop · Chrome / Edge Browser</p>
-              </div>
-            </div>
-            <span className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-semibold">
-              ACTIVE
-            </span>
+      {/* Danger Zone Section */}
+      <div className="bg-[#101C35] border border-rose-500/30 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl">
+        <div className="flex items-center space-x-3 pb-4 border-b border-rose-500/20">
+          <div className="w-10 h-10 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center">
+            <AlertTriangle className="w-5 h-5" />
           </div>
-
-          <div className="p-3.5 rounded-xl bg-[#0B1323] border border-[#E8E0D5]/15 flex items-center justify-between text-xs">
-            <div className="flex items-center space-x-3">
-              <div className="w-2 h-2 rounded-full bg-[#E8E0D5]/40" />
-              <div>
-                <span className="font-bold text-[#FFFFFF]">Mobile Companion App</span>
-                <p className="text-[10px] text-[#E8E0D5]/60">Last synced 2 days ago · Android / iOS</p>
-              </div>
-            </div>
-            <span className="text-[10px] text-[#E8E0D5]/50">DEVICE 2 OF 3</span>
+          <div>
+            <h2 className="text-base font-bold text-rose-200">
+              {t("settings_danger_heading")}
+            </h2>
+            <p className="text-xs text-[#E8E0D5]/70">
+              {t("settings_danger_desc")}
+            </p>
           </div>
         </div>
-      </div>
 
-      {/* Danger Zone: Reset Progress */}
-      <div className="bg-[#101C35] border border-rose-500/30 rounded-3xl p-6 sm:p-8 space-y-4 shadow-xl">
-        <h2 className="text-base font-bold text-rose-400 flex items-center space-x-2">
-          <Trash2 className="w-5 h-5" />
-          <span>Danger Zone: Reset Student Progress</span>
-        </h2>
-        <p className="text-xs text-[#E8E0D5]/70 leading-relaxed">
-          Permanently clear your local streak counter, mastered kanji, mastered vocabulary, and historical mock examination scores.
-        </p>
-        <button
-          onClick={handleResetProgress}
-          className="px-4 py-2.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 border border-rose-500/40 text-xs font-bold transition-all flex items-center space-x-2"
-        >
-          <RotateCcw className="w-3.5 h-3.5" />
-          <span>Reset All Study Progress</span>
-        </button>
+        <div>
+          <button
+            onClick={handleResetProgress}
+            className="w-full sm:w-auto py-3 px-5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-200 text-xs font-bold flex items-center justify-center space-x-2 border border-rose-500/40 transition-colors"
+          >
+            <RotateCcw className="w-4 h-4" />
+            <span>{t("settings_reset_btn")}</span>
+          </button>
+        </div>
       </div>
     </div>
   );

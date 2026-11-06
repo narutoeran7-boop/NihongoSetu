@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth/authContext";
+import { LanguageProvider } from "@/lib/i18n/LanguageContext";
 import SplashScreen from "@/components/common/SplashScreen";
 
 export const viewport: Viewport = {
@@ -61,7 +62,9 @@ export default function RootLayout({
     <html lang="ja">
       <body className="antialiased selection:bg-[#C83C50] selection:text-[#FFFFFF]">
         <SplashScreen />
-        <AuthProvider>{children}</AuthProvider>
+        <AuthProvider>
+          <LanguageProvider>{children}</LanguageProvider>
+        </AuthProvider>
       </body>
     </html>
   );

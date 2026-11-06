@@ -13,6 +13,7 @@ const SUITES = [
   { name: "Vocabulary 105 & Multilingual Dataset", file: "src/lib/content/test-vocab.ts" },
   { name: "Grammar Formations & Tamil Translations", file: "src/lib/content/test-grammar.ts" },
   { name: "JLPT Mock Exams & Parity", file: "src/lib/content/test-exams.ts" },
+  { name: "Localization & Feature Naming", file: "src/lib/content/test-i18n.ts" },
 ];
 
 console.log("=================================================================");
@@ -28,15 +29,19 @@ for (const suite of SUITES) {
   
   try {
     // 1. Compile with tsc
-    execSync(`npx tsc ${suite.file} --outDir dist-qa-test --target es2020 --module commonjs --moduleResolution node --skipLibCheck --esModuleInterop`, {
+    execSync(`npx tsc ${suite.file} --rootDir src --outDir dist-qa-test --target es2020 --module commonjs --moduleResolution node --skipLibCheck --esModuleInterop`, {
       stdio: 'pipe',
       encoding: 'utf8'
     });
 
     // 2. Identify compiled JS
-    const jsPath = suite.file
+    let jsPath = suite.file
       .replace(/^src\//, 'dist-qa-test/')
       .replace(/\.ts$/, '.js');
+    if (!fs.existsSync(jsPath)) {
+      const alt = path.join(__dirname, '../dist-qa-test', path.basename(suite.file, '.ts') + '.js');
+      if (fs.existsSync(alt)) jsPath = alt;
+    }
 
     // 3. Execute with node
     const output = execSync(`node ${jsPath}`, {
@@ -60,3 +65,4 @@ for (const suite of SUITES) {
 console.log("\n=================================================================");
 console.log(`  SUMMARY: ${passedSuites} / ${totalSuites} TEST SUITES PASSED (100%)`);
 console.log("=================================================================\n");
+

@@ -159,7 +159,7 @@ export const YOON_KANA: KanaItem[] = [
 
   // Nya-Row
   { id: "yoon-nya", hira: "にゃ", kata: "ニャ", romaji: "nya", category: "yoon", strokes: { hira: 6, kata: 4 } },
-  { id: "yoon-nyu", hira: "にゅ", kata: "nyu", romaji: "nyu", category: "yoon", strokes: { hira: 5, kata: 4 } },
+  { id: "yoon-nyu", hira: "にゅ", kata: "ニュ", romaji: "nyu", category: "yoon", strokes: { hira: 5, kata: 4 } },
   { id: "yoon-nyo", hira: "にょ", kata: "ニョ", romaji: "nyo", category: "yoon", strokes: { hira: 5, kata: 5 } },
 
   // Hya-Row

@@ -20,9 +20,9 @@ export default function FeaturesPage() {
   const features = [
     {
       icon: PenTool,
-      title: "Interactive Kana Studio & Canvas",
-      badge: "Core Basics",
-      description: "Master all 46 basic characters, dakuon, handakuon, and yoon for both Hiragana and Katakana. Draw directly onto an interactive high-DPI canvas with animated stroke guides and instant clear/evaluate controls.",
+      title: "Japanese Script & Stroke Order Canvas",
+      badge: "Japanese Script",
+      description: "Master all 46 basic characters, dakuon, handakuon, and yōon for both Hiragana and Katakana. Draw directly onto an interactive high-DPI canvas with authentic stroke guides and numbered starting points.",
       link: "/portal/kana"
     },
     {

@@ -129,3 +129,4 @@ console.log(`\n=== VOCABULARY TEST RESULTS: ${passedTests}/${totalTests} TESTS P
 if (passedTests !== totalTests) {
   process.exit(1);
 }
+

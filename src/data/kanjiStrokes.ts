@@ -181,13 +181,5 @@ export function getKanjiStrokes(char: string, strokeCount: number = 4): KanjiStr
   return strokes;
 }
 
-export function getKanjiStrokeData(char: string, strokeCount: number = 4): KanjiStrokeData {
-  const strokes = getKanjiStrokes(char, strokeCount);
-  return {
-    character: char,
-    strokeCount: strokes.length,
-    radical: "",
-    strokes,
-  };
-}
+export const getKanjiStrokeData = getKanjiStrokes;
 
