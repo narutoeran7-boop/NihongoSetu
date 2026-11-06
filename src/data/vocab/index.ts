@@ -65,6 +65,16 @@ export function vocabularyEntryToMultilingualWord(entry: VocabularyEntry): Multi
   };
 }
 
+export const VOCAB_TARGET_COUNTS = {
+  N5: 800,
+  N4: 1500,
+  N3: 3750,
+  N2: 6000,
+  N1: 10000,
+};
+
+export const CORE_VOCABULARY: MultilingualVocabWord[] = N5_VOCABULARY.map(vocabularyEntryToMultilingualWord);
+
 /**
  * Retrieves all Vocabulary entries across all JLPT levels.
  */

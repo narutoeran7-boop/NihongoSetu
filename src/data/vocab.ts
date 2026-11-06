@@ -1,4 +1,6 @@
 // NihongoSetu Core Vocabulary Datasets & Offline Fallback with 12-Language Translations
+import { N5_VOCABULARY } from "./vocab/n5";
+import { vocabularyEntryToMultilingualWord } from "./vocab/index";
 
 export interface MultilingualVocabWord {
   kanji: string;
@@ -10,7 +12,7 @@ export interface MultilingualVocabWord {
   meaning: Record<string, string>;
 }
 
-export const CORE_VOCABULARY: MultilingualVocabWord[] = [
+const FALLBACK_LEGACY_VOCABULARY: MultilingualVocabWord[] = [
   {
     kanji: "私",
     reading: "わたし",
@@ -672,6 +674,11 @@ export const CORE_VOCABULARY: MultilingualVocabWord[] = [
     },
   },
 ];
+
+export const CORE_VOCABULARY: MultilingualVocabWord[] =
+  typeof N5_VOCABULARY !== "undefined" && N5_VOCABULARY.length > 0
+    ? N5_VOCABULARY.map(vocabularyEntryToMultilingualWord)
+    : FALLBACK_LEGACY_VOCABULARY;
 
 export const VOCAB_TARGET_COUNTS = {
   N5: 800,

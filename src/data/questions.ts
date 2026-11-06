@@ -10,6 +10,9 @@ export interface ClientExamQuestion {
   question: string;
   options: string[];
   category: 'Vocabulary' | 'Grammar' | 'Reading' | 'Listening';
+  section?: string;
+  passage?: string;
+  audioPrompt?: string;
 }
 
 // Backwards-compatible alias
@@ -23,33 +26,82 @@ export interface ExamReviewItem {
   correctIndex: number;
   isCorrect: boolean;
   explanation: string;
+  explanationTa?: string;
   category: 'Vocabulary' | 'Grammar' | 'Reading' | 'Listening';
+  section?: string;
 }
 
-type ClientQuestionTuple = [string, string[], 'Vocabulary' | 'Grammar'];
+// [question, options, category, section?, passage?, audioPrompt?]
+type ClientQuestionTuple = [string, string[], 'Vocabulary' | 'Grammar' | 'Reading' | 'Listening', string?, string?, string?];
 
 const CLIENT_QUESTIONS_RAW: Record<JLPTLevel, ClientQuestionTuple[]> = {
   N5: [
-    ["「山」の読み方は？", ["やま", "かわ", "うみ", "そら"], "Vocabulary"],
-    ["「昨日」の意味は？", ["today", "yesterday", "tomorrow", "morning"], "Vocabulary"],
-    ["わたしは毎朝、パン___食べます。", ["を", "に", "で", "が"], "Grammar"],
-    ["田中さん___学生です。", ["は", "を", "で", "に"], "Grammar"],
-    ["「安い」の反対は？", ["高い", "古い", "近い", "少ない"], "Vocabulary"],
-    ["図書館で本を読みます。どこで本を読みますか。", ["学校", "図書館", "家", "駅"], "Grammar"],
-    ["毎日六時___起きます。", ["に", "を", "で", "へ"], "Grammar"],
-    ["「友達」の読み方は？", ["ともだち", "ともたち", "ゆうだち", "とももち"], "Vocabulary"],
-    ["これはだれ___かばんですか。", ["の", "を", "に", "で"], "Grammar"],
-    ["雨が降っています。外へ行きますか。", ["雨なので傘を持って行きます", "昨日は晴れでした", "毎日泳ぎます", "駅で本を買います"], "Grammar"],
-    ["「午後」の読み方は？", ["ごぜん", "ごご", "あさ", "よる"], "Vocabulary"],
-    ["「病院」はどこですか。", ["本を買うところ", "病気の人が行くところ", "電車に乗るところ", "ご飯を食べるところ"], "Vocabulary"],
-    ["きのう、映画を___。", ["見ます", "見ました", "見ません", "見ましょう"], "Grammar"],
-    ["机の上に本が二___あります。", ["人", "本", "冊", "匹"], "Grammar"],
-    ["「暑い」の意味は？", ["cold weather", "hot weather", "expensive", "busy"], "Vocabulary"],
-    ["わたしは日本語___勉強します。", ["を", "が", "に", "へ"], "Grammar"],
-    ["駅___友達を待ちます。", ["を", "で", "が", "へ"], "Grammar"],
-    ["日曜日は学校へ___。", ["行きません", "行きましたか", "行きますか", "行って"], "Grammar"],
-    ["「毎週」の読み方は？", ["まいにち", "まいしゅう", "まいつき", "まいとし"], "Vocabulary"],
-    ["A: いっしょに昼ご飯を食べませんか。 B: ___。", ["はい、食べましょう", "いただきますでした", "おやすみなさい", "いってきます"], "Grammar"]
+    // Section 1: Language Knowledge (Vocabulary & Kanji) - Q1 to Q7
+    ["「山」の読み方は？", ["やま", "かわ", "うみ", "そら"], "Vocabulary", "Language Knowledge"],
+    ["「昨日」の意味は？", ["today", "yesterday", "tomorrow", "morning"], "Vocabulary", "Language Knowledge"],
+    ["「安い」の反対は？", ["高い", "古い", "近い", "少ない"], "Vocabulary", "Language Knowledge"],
+    ["「友達」の読み方は？", ["ともだち", "ともたち", "ゆうだち", "とももち"], "Vocabulary", "Language Knowledge"],
+    ["「午後」の読み方は？", ["ごぜん", "ごご", "あさ", "よる"], "Vocabulary", "Language Knowledge"],
+    ["「病院」はどんなところですか。", ["本を買うところ", "病気の人が行くところ", "電車に乗るところ", "ご飯を食べるところ"], "Vocabulary", "Language Knowledge"],
+    ["「毎週」の読み方は？", ["まいにち", "まいしゅう", "まいつき", "まいとし"], "Vocabulary", "Language Knowledge"],
+
+    // Section 2: Language Knowledge (Grammar) - Q8 to Q14
+    ["わたしは毎朝、パン___食べます。", ["を", "に", "で", "が"], "Grammar", "Language Knowledge"],
+    ["田中さん___学生です。", ["は", "を", "で", "に"], "Grammar", "Language Knowledge"],
+    ["毎日六時___起きます。", ["に", "を", "で", "へ"], "Grammar", "Language Knowledge"],
+    ["これはだれ___かばんですか。", ["の", "を", "に", "で"], "Grammar", "Language Knowledge"],
+    ["きのう、映画を___。", ["見ます", "見ました", "見ません", "見ましょう"], "Grammar", "Language Knowledge"],
+    ["机の上に本が二___あります。", ["人", "本", "冊", "匹"], "Grammar", "Language Knowledge"],
+    ["駅___友達を待ちます。", ["で", "を", "が", "へ"], "Grammar", "Language Knowledge"],
+
+    // Section 3: Reading Comprehension (読解) - Q15 to Q17
+    [
+      "木村さんはデパートで何をしましたか。",
+      ["靴を買ってラーメンを食べた", "本を読んだ", "電車に乗った", "映画を見た"],
+      "Reading",
+      "Reading",
+      "木村さんの日記：きのうは友達とデパートへ行きました。新しい靴を買って、レストランで美味しいラーメンを食べました。"
+    ],
+    [
+      "図書館で飲んでもいいものは何ですか。",
+      ["水とお茶", "ジュースとコーヒー", "お酒", "何も飲んではいけない"],
+      "Reading",
+      "Reading",
+      "図書館からのお願い：館内では静かにしてください。飲み物は水とお茶だけ飲んでもいいです。"
+    ],
+    [
+      "田中さんは何で大学へ行きますか。",
+      ["電車", "バス", "自転車", "歩いて"],
+      "Reading",
+      "Reading",
+      "田中さんは毎朝７時に起きて、パンと卵を食べます。８時に電車で大学へ行きます。"
+    ],
+
+    // Section 4: Listening Comprehension (聴解) - Q18 to Q20
+    [
+      "駅はどこにありますか。",
+      ["角を右へ曲がったところ", "左の建物の後ろ", "信号を渡ったところ", "バス停の隣"],
+      "Listening",
+      "Listening",
+      undefined,
+      "女の人：すみません、駅はどこですか。男の人：あの角を右へ曲がると、すぐ前にありますよ。女の人：わかりました。ありがとうございます。"
+    ],
+    [
+      "パーティーは何時に始まりますか。",
+      ["午後６時半", "午後６時", "午後６時１５分", "午後７時"],
+      "Listening",
+      "Listening",
+      undefined,
+      "男の人：明日のパーティーは何時に始まりますか。女の人：午後６時半からです。男の人：じゃあ、６時１５分に行きますね。"
+    ],
+    [
+      "二人は何を食べに行きますか。",
+      ["ラーメン", "寿司", "カレー", "パン"],
+      "Listening",
+      "Listening",
+      undefined,
+      "女の人：いっしょにお昼ご飯を食べに行きませんか。男の人：いいですね、ラーメンを食べましょう。女の人：そうしましょう。"
+    ]
   ],
   N4: [
     ["「準備」の読み方は？", ["じゅんび", "じゅびん", "しゅんび", "じゅんぴ"], "Vocabulary"],
@@ -98,15 +150,6 @@ const CLIENT_QUESTIONS_RAW: Record<JLPTLevel, ClientQuestionTuple[]> = {
   N2: [
     ["「傾向」の読み方は？", ["けいこう", "けいごう", "きょうこう", "けんこう"], "Vocabulary"],
     ["この計画は費用の面___問題がある。", ["で", "に", "を", "へ"], "Grammar"],
-    ["努力した___、必ず成功するとは限らない。", ["からといって", "ものなら", "どころか", "に先立って"], "Grammar"],
-    ["新製品は性能だけでなく、価格の面でも競争力がある。新製品の特徴は？", ["性能と価格の両方で強みがある", "価格だけが高い", "性能が低い", "販売を終了した"], "Grammar"],
-    ["「懸念」の意味に最も近いものは？", ["心配", "期待", "満足", "確信"], "Vocabulary"],
-    ["会議の開始___、資料を全員に配布した。", ["に先立ち", "に反して", "に応じて", "に基づき"], "Grammar"],
-    ["彼の説明は事実___いる。", ["に基づいて", "を問わず", "にかけて", "とともに"], "Grammar"],
-    ["需要の増加に伴い、生産量を拡大した。何に伴って生産量を拡大しましたか。", ["需要の増加", "人員の減少", "設備の故障", "価格の下落"], "Grammar"],
-    ["この規則は年齢___、すべての参加者に適用される。", ["を問わず", "に限り", "に沿って", "に反して"], "Grammar"],
-    ["十分に検討した___、結論を出すべきだ。", ["うえで", "ばかりに", "どころか", "ものの"], "Grammar"],
-    ["「促進」の読み方は？", ["そくしん", "そくじん", "ぞくしん", "そっしん"], "Vocabulary"],
     ["彼の説明は具体例を___、分かりやすかった。", ["交えて", "除いて", "問わず", "反して"], "Grammar"],
     ["この結果は予想___のものだった。", ["に反する", "に限る", "に沿う", "に応じる"], "Grammar"],
     ["制度を変更するにあたって、利用者の意見を調査した。何をする前に調査しましたか。", ["制度の変更", "商品の発送", "会議の中止", "人員の採用"], "Grammar"],
@@ -143,12 +186,15 @@ const CLIENT_QUESTIONS_RAW: Record<JLPTLevel, ClientQuestionTuple[]> = {
 
 export function getClientQuestionsForLevel(level: JLPTLevel): ClientExamQuestion[] {
   const list = CLIENT_QUESTIONS_RAW[level] || [];
-  return list.map(([question, options, category], idx) => ({
+  return list.map(([question, options, category, section, passage, audioPrompt], idx) => ({
     id: `${level.toLowerCase()}-q-${idx + 1}`,
     level,
     question,
     options,
-    category
+    category,
+    section: section || (category === 'Vocabulary' || category === 'Grammar' ? 'Language Knowledge' : category),
+    passage,
+    audioPrompt,
   }));
 }
 

@@ -121,7 +121,9 @@ export async function POST(req: NextRequest) {
         correctIndex: serverQ.correctIndex,
         isCorrect,
         explanation: serverQ.explanation,
+        explanationTa: serverQ.explanationTa,
         category: serverQ.category,
+        section: serverQ.section,
       });
     }
 

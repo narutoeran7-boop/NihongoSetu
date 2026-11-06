@@ -62,6 +62,22 @@ export function kanjiEntryToCardItem(entry: KanjiEntry): KanjiCardItem {
   };
 }
 
+export const KANJI_TARGET_COUNTS = {
+  N5: 103,
+  N4: 166,
+  N3: 367,
+  N2: 367,
+  N1: 117,
+};
+
+export function getKanjiForLevel(level: string): KanjiCardItem[] {
+  const modular = KANJI_BY_LEVEL[level as JLPTLevel];
+  if (modular && modular.length > 0) {
+    return modular.map(kanjiEntryToCardItem);
+  }
+  return [];
+}
+
 /**
  * Retrieves all Kanji entries across all JLPT levels.
  */

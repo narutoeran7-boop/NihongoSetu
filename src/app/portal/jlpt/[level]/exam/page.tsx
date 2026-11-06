@@ -20,6 +20,7 @@ import {
   ChevronRight,
   ChevronLeft,
   ShieldCheck,
+  Volume2,
 } from "lucide-react";
 
 export default function TimedMockExamPage({
@@ -123,6 +124,19 @@ export default function TimedMockExamPage({
     const m = Math.floor(seconds / 60);
     const s = seconds % 60;
     return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
+  };
+
+  const playAudioPrompt = (text: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = "ja-JP";
+      utterance.rate = 0.85;
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      // ignore
+    }
   };
 
   const handleSelectOption = (optionIndex: number) => {
@@ -230,6 +244,36 @@ export default function TimedMockExamPage({
                 {currentQuestion.category}
               </span>
             </div>
+
+            {/* Reading Passage Box (if applicable) */}
+            {currentQuestion.passage && (
+              <div className="p-4 sm:p-5 rounded-2xl bg-[#0B1323] border border-[#E8E0D5]/20 space-y-2">
+                <div className="text-[11px] font-bold text-[#C83C50] uppercase tracking-wider flex items-center justify-between">
+                  <span>読解問題本文 · Reading Passage</span>
+                </div>
+                <p className="text-sm font-japanese text-[#FFFFFF] leading-relaxed whitespace-pre-line">
+                  {currentQuestion.passage}
+                </p>
+              </div>
+            )}
+
+            {/* Listening Audio Dialogue Player (if applicable) */}
+            {currentQuestion.audioPrompt && (
+              <div className="p-4 sm:p-5 rounded-2xl bg-[#0B1323] border border-[#E8E0D5]/20 space-y-3">
+                <div className="text-[11px] font-bold text-blue-400 uppercase tracking-wider flex items-center justify-between">
+                  <span>聴解音声問題 · Listening Audio Dialogue</span>
+                  <span className="text-[10px] text-[#E8E0D5]/60">Speech Synthesizer</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => playAudioPrompt(currentQuestion.audioPrompt!)}
+                  className="w-full py-3 px-4 rounded-xl bg-[#C83C50]/20 hover:bg-[#C83C50]/30 text-[#C83C50] border border-[#C83C50]/30 font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-sm"
+                >
+                  <Volume2 className="w-4 h-4" />
+                  <span>音声を聞く · Play Japanese Audio Dialogue</span>
+                </button>
+              </div>
+            )}
 
             {/* Prompt */}
             <div className="text-xl sm:text-2xl font-bold font-japanese leading-relaxed text-[#FFFFFF]">
@@ -444,9 +488,17 @@ export default function TimedMockExamPage({
                     </div>
 
                     {/* Explanation released from server */}
-                    <div className="p-3 rounded-xl bg-[#0B1323] border border-[#E8E0D5]/10 text-xs text-[#E8E0D5]/80 leading-relaxed">
-                      <strong className="text-[#C83C50]">Grammar & Meaning Note: </strong>
-                      {item.explanation}
+                    <div className="p-3 rounded-xl bg-[#0B1323] border border-[#E8E0D5]/10 text-xs text-[#E8E0D5]/80 leading-relaxed space-y-1">
+                      <div>
+                        <strong className="text-[#C83C50]">Grammar & Meaning Note: </strong>
+                        {item.explanation}
+                      </div>
+                      {item.explanationTa && (
+                        <div className="text-[#C83C50]">
+                          <strong className="text-[#C83C50]">தமிழ் விளக்கம்: </strong>
+                          {item.explanationTa}
+                        </div>
+                      )}
                     </div>
                   </div>
                 );

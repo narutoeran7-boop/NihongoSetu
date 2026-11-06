@@ -7,16 +7,15 @@ import {
   Search,
   Volume2,
   CheckCircle2,
-  Bookmark,
   ChevronDown,
   Sparkles,
-  ExternalLink,
+  Info,
 } from "lucide-react";
 
 const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
 
 const LEVEL_DESCRIPTIONS: Record<string, string> = {
-  N5: "Basic sentence patterns, copulas (です), core particles (は, を, に, で), and polite verbal requests.",
+  N5: "Foundational Japanese sentence structures, copulas (です), core particles (は, を, に, で, へ, と), polite verbs, and requests.",
   N4: "Expressing obligations, permissions, simultaneous actions (〜ながら), reasons, and past experiences.",
   N3: "Intermediate bridge: decisions (ことにする), habits, expectations (はずだ), causations, and contrasting aspects.",
   N2: "Upper-intermediate nuances: inevitable outcomes (かねない), limits, perspectives, and formal discourse.",
@@ -40,7 +39,9 @@ export default function GrammarDecksPage() {
       (item) =>
         item.pattern.toLowerCase().includes(q) ||
         item.reading.toLowerCase().includes(q) ||
-        item.meaning.toLowerCase().includes(q)
+        item.meaning.toLowerCase().includes(q) ||
+        (item.meaningTa && item.meaningTa.toLowerCase().includes(q)) ||
+        (item.formation && item.formation.toLowerCase().includes(q))
     );
   }, [items, searchQuery]);
 
@@ -50,7 +51,7 @@ export default function GrammarDecksPage() {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.lang = "ja-JP";
-      utterance.rate = 0.9;
+      utterance.rate = 0.85;
       window.speechSynthesis.speak(utterance);
     } catch {
       // ignore
@@ -70,13 +71,13 @@ export default function GrammarDecksPage() {
         <div>
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#C83C50]/20 text-[#C83C50] text-xs font-semibold mb-2 border border-[#C83C50]/30">
             <BookMarked className="w-3.5 h-3.5" />
-            <span>JLPT Grammar Decks</span>
+            <span>JLPT Grammar Decks · 文法マスター</span>
           </div>
           <h1 className="text-3xl font-extrabold text-[#FFFFFF]">
-            Structured Grammar Mastery
+            Structured Grammar Mastery & Patterns
           </h1>
           <p className="text-xs text-[#E8E0D5]/70 mt-1">
-            Browse grammar rules from JLPT N5 to N1 with sentence breakdowns and audio playback.
+            Browse authentic grammar rules from JLPT N5 to N1 with grammatical formations, Tamil explanations, and audio examples.
           </p>
         </div>
 
@@ -88,6 +89,7 @@ export default function GrammarDecksPage() {
               onClick={() => {
                 setActiveLevel(lvl);
                 setExpandedIndex(0);
+                setSearchQuery("");
               }}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 activeLevel === lvl
@@ -103,17 +105,23 @@ export default function GrammarDecksPage() {
 
       {/* Level Description & Search Banner */}
       <div className="bg-[#101C35] border border-[#E8E0D5]/20 rounded-2xl p-4 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
-        <div className="space-y-1">
+        <div className="space-y-1.5 flex-1 max-w-xl">
           <div className="flex items-center space-x-2">
-            <span className="text-xs font-extrabold px-2 py-0.5 rounded bg-[#C83C50] text-[#FFFFFF]">
+            <span className="text-xs font-extrabold px-2.5 py-0.5 rounded bg-[#C83C50] text-[#FFFFFF]">
               JLPT {activeLevel}
             </span>
             <span className="text-xs text-[#E8E0D5]/80 font-medium">
               {filteredItems.length} Patterns in Deck
             </span>
           </div>
-          <p className="text-xs text-[#E8E0D5]/70 max-w-xl">
+          <p className="text-xs text-[#E8E0D5]/70">
             {LEVEL_DESCRIPTIONS[activeLevel]}
+          </p>
+          <p className="text-[11px] text-[#E8E0D5]/50 flex items-center gap-1.5 pt-0.5">
+            <Info className="w-3.5 h-3.5 shrink-0 text-[#C83C50]" />
+            <span>
+              Curricular Reference Target (Estimate): Curricula organized based on standard Japanese language education benchmarks.
+            </span>
           </p>
         </div>
 
@@ -124,7 +132,7 @@ export default function GrammarDecksPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search pattern or meaning..."
+            placeholder="Search pattern, English, or தமிழ்..."
             className="w-full bg-[#101C35] border border-[#E8E0D5]/25 rounded-xl pl-10 pr-4 py-2 text-xs text-[#FFFFFF] placeholder-[#E8E0D5]/40 focus:outline-none focus:border-[#C83C50]"
           />
         </div>
@@ -176,9 +184,14 @@ export default function GrammarDecksPage() {
                         [{item.reading}]
                       </span>
                     </div>
-                    <p className="text-xs text-[#E8E0D5]/80 mt-1 leading-relaxed">
+                    <p className="text-xs text-[#E8E0D5]/90 mt-1 leading-relaxed">
                       {item.meaning}
                     </p>
+                    {item.meaningTa && (
+                      <p className="text-xs text-[#C83C50] font-medium mt-0.5">
+                        தமிழ்: {item.meaningTa}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -202,15 +215,25 @@ export default function GrammarDecksPage() {
                 </div>
               </div>
 
-              {/* Collapsible Example Sentence Details */}
+              {/* Collapsible Details: Formation & Example Sentences */}
               {isExpanded && (
-                <div className="px-5 pb-5 pt-1 border-t border-[#E8E0D5]/10">
-                  <div className="p-4 rounded-xl bg-[#0B1323] border border-[#E8E0D5]/10 space-y-2 mt-3">
-                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#C83C50]">
-                      Example Sentence · 例文
+                <div className="px-5 pb-5 pt-1 border-t border-[#E8E0D5]/10 space-y-3">
+                  {/* Grammatical Formation */}
+                  {item.formation && (
+                    <div className="p-3 rounded-xl bg-[#0B1323] border border-[#E8E0D5]/10 space-y-1 mt-3">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-blue-400">
+                        Grammatical Formation & Connection · 接続
+                      </div>
+                      <div className="text-xs font-mono font-bold text-[#FFFFFF]">
+                        {item.formation}
+                      </div>
                     </div>
-                    <div className="text-base font-medium font-japanese text-[#FFFFFF] flex items-center justify-between">
-                      <span>{item.exampleJp}</span>
+                  )}
+
+                  {/* Example Sentence Box */}
+                  <div className="p-4 rounded-xl bg-[#0B1323] border border-[#E8E0D5]/10 space-y-2">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#C83C50] flex items-center justify-between">
+                      <span>Example Sentence · 例文</span>
                       <button
                         onClick={() => speakJapanese(item.exampleJp)}
                         className="text-xs text-[#C83C50] hover:underline flex items-center space-x-1"
@@ -219,9 +242,17 @@ export default function GrammarDecksPage() {
                         <span>Play Audio</span>
                       </button>
                     </div>
+                    <div className="text-base font-medium font-japanese text-[#FFFFFF]">
+                      {item.exampleJp}
+                    </div>
                     <div className="text-xs text-[#E8E0D5]/70 italic">
                       &quot;{item.exampleEn}&quot;
                     </div>
+                    {item.exampleTa && (
+                      <div className="text-xs text-[#C83C50]/90 font-medium">
+                        தமிழ்: {item.exampleTa}
+                      </div>
+                    )}
                   </div>
                 </div>
               )}

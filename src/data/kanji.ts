@@ -1,4 +1,6 @@
 // NihongoSetu Core Kanji Dataset & Readings
+import { N5_KANJI } from "./kanji/n5";
+import { kanjiEntryToCardItem } from "./kanji/index";
 export interface KanjiEntry {
   character: string;
   onyomi: string;
@@ -228,7 +230,7 @@ const KANJI_READING_EXAMPLES={
 
 
 export const KANJI_TARGET_COUNTS = {
-  N5: 80,
+  N5: 103, // Canonical N5 target based on MEXT Grade 1–2 / JLPT reference standard
   N4: 166,
   N3: 367,
   N2: 367,
@@ -245,6 +247,9 @@ export interface KanjiCardItem {
 }
 
 export function getKanjiForLevel(level: string): KanjiCardItem[] {
+  if (level === "N5" && typeof N5_KANJI !== "undefined" && N5_KANJI.length > 0) {
+    return N5_KANJI.map(kanjiEntryToCardItem);
+  }
   const raw = ((KANJI_DATA as unknown) as Record<string, [string, string, string, string, string][]>)[level] || [];
   return raw.map(([character, kunyomi, onyomi, meanings, examples]) => ({
     character,

@@ -1,16 +1,21 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from "react";
-import { getKanjiForLevel, KANJI_TARGET_COUNTS, KanjiCardItem } from "@/data/kanji";
-import { getStudentProfile, toggleLearnedKanji, StudentProfile } from "@/lib/storage/studentState";
+import React, { useState, useMemo } from "react";
+import {
+  getKanjiForLevel,
+  KANJI_TARGET_COUNTS,
+  getModularKanjiByChar,
+} from "@/data/kanji";
+import { getStudentProfile, toggleLearnedKanji } from "@/lib/storage/studentState";
+import KanjiStrokePlayer from "@/components/kanji/KanjiStrokePlayer";
 import {
   Sparkles,
   Search,
   Volume2,
   CheckCircle2,
+  Info,
+  PenTool,
   BookOpen,
-  Layers,
-  Award,
 } from "lucide-react";
 
 const LEVELS = ["N5", "N4", "N3", "N2", "N1"];
@@ -19,6 +24,7 @@ export default function KanjiVaultPage() {
   const [activeLevel, setActiveLevel] = useState("N5");
   const [searchQuery, setSearchQuery] = useState("");
   const [learnedKanji, setLearnedKanji] = useState<string[]>(() => getStudentProfile().learnedKanji || []);
+  const [activeViewTab, setActiveViewTab] = useState<"details" | "strokes">("details");
 
   const kanjiList = useMemo(() => {
     return getKanjiForLevel(activeLevel);
@@ -34,17 +40,26 @@ export default function KanjiVaultPage() {
     return kanjiList[0] || null;
   }, [kanjiList, selectedKanjiChar]);
 
+  const richEntry = useMemo(() => {
+    if (!selectedKanji) return null;
+    return getModularKanjiByChar(selectedKanji.character) || null;
+  }, [selectedKanji]);
+
   const filteredKanji = useMemo(() => {
     if (!searchQuery.trim()) return kanjiList;
     const q = searchQuery.toLowerCase();
-    return kanjiList.filter(
-      (item) =>
+    return kanjiList.filter((item) => {
+      const rich = getModularKanjiByChar(item.character);
+      const matchesTamil = rich?.meaningTa ? rich.meaningTa.toLowerCase().includes(q) : false;
+      return (
         item.character.includes(q) ||
         item.onyomi.toLowerCase().includes(q) ||
         item.kunyomi.toLowerCase().includes(q) ||
         item.meanings.toLowerCase().includes(q) ||
-        item.examples.toLowerCase().includes(q)
-    );
+        item.examples.toLowerCase().includes(q) ||
+        matchesTamil
+      );
+    });
   }, [kanjiList, searchQuery]);
 
   const handleToggleLearned = (char: string) => {
@@ -67,7 +82,7 @@ export default function KanjiVaultPage() {
     }
   };
 
-  const targetCount = (KANJI_TARGET_COUNTS as Record<string, number>)[activeLevel] || 100;
+  const targetCount = (KANJI_TARGET_COUNTS as Record<string, number>)[activeLevel] || 103;
   const currentLearnedInDeck = kanjiList.filter((k) => learnedKanji.includes(k.character)).length;
 
   return (
@@ -77,13 +92,13 @@ export default function KanjiVaultPage() {
         <div>
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#C83C50]/20 text-[#C83C50] text-xs font-semibold mb-2 border border-[#C83C50]/30">
             <Sparkles className="w-3.5 h-3.5" />
-            <span>Kanji Vault Mastery</span>
+            <span>Kanji Vault Mastery · 漢字マスター</span>
           </div>
           <h1 className="text-3xl font-extrabold text-[#FFFFFF]">
-            JLPT Kanji Explorer & Readings
+            JLPT Kanji Explorer & Stroke Animator
           </h1>
           <p className="text-xs text-[#E8E0D5]/70 mt-1">
-            Explore On&apos;yomi, Kun&apos;yomi readings, meanings, and real compound word examples.
+            Authentic On&apos;yomi, Kun&apos;yomi readings, stroke-order animations, radicals, and Tamil translations.
           </p>
         </div>
 
@@ -95,6 +110,7 @@ export default function KanjiVaultPage() {
               onClick={() => {
                 setActiveLevel(lvl);
                 setSearchQuery("");
+                setSelectedKanjiChar(null);
               }}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 activeLevel === lvl
@@ -108,15 +124,15 @@ export default function KanjiVaultPage() {
         </div>
       </div>
 
-      {/* Level Target Progress & Search */}
+      {/* Level Target Progress, Disclaimer & Search */}
       <div className="bg-[#101C35] border border-[#E8E0D5]/20 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-lg">
-        <div className="space-y-2 flex-1 max-w-md">
+        <div className="space-y-2 flex-1 max-w-xl">
           <div className="flex items-center justify-between text-xs">
             <span className="font-bold text-[#FFFFFF]">
               JLPT {activeLevel} Mastery Progress:
             </span>
             <span className="text-[#E8E0D5]/70">
-              {currentLearnedInDeck} / {kanjiList.length} in Deck (Official Target: {targetCount})
+              {currentLearnedInDeck} / {kanjiList.length} in Deck (Curricular Reference Target: {targetCount})
             </span>
           </div>
           <div className="w-full bg-[#E8E0D5]/10 h-2 rounded-full overflow-hidden">
@@ -127,6 +143,12 @@ export default function KanjiVaultPage() {
               }}
             />
           </div>
+          <p className="text-[11px] text-[#E8E0D5]/50 flex items-center gap-1.5">
+            <Info className="w-3.5 h-3.5 shrink-0 text-[#C83C50]" />
+            <span>
+              Curricular Reference Target (Estimate): Post-2010 JLPT does not publish fixed lists. Canonical N5 dataset verified against MEXT Elementary Kyōiku Grade 1–2 standards.
+            </span>
+          </p>
         </div>
 
         <div className="relative w-full md:w-72">
@@ -135,7 +157,7 @@ export default function KanjiVaultPage() {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search character, reading, or meaning..."
+            placeholder="Search kanji, reading, or தமிழ் meaning..."
             className="w-full bg-[#101C35] border border-[#E8E0D5]/25 rounded-xl pl-10 pr-4 py-2 text-xs text-[#FFFFFF] placeholder-[#E8E0D5]/40 focus:outline-none focus:border-[#C83C50]"
           />
         </div>
@@ -147,13 +169,14 @@ export default function KanjiVaultPage() {
         <div className="lg:col-span-7 bg-[#101C35] border border-[#E8E0D5]/20 rounded-3xl p-6 space-y-4 shadow-xl">
           <div className="flex items-center justify-between text-xs text-[#E8E0D5]/70 pb-2 border-b border-[#E8E0D5]/10">
             <span>Showing {filteredKanji.length} Kanji Characters</span>
-            <span>Click to inspect details</span>
+            <span className="text-[#C83C50] font-medium">Click character to view details & stroke order</span>
           </div>
 
-          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-3 max-h-[560px] overflow-y-auto pr-1">
+          <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-3 max-h-[600px] overflow-y-auto pr-1">
             {filteredKanji.map((item, idx) => {
               const isSelected = selectedKanji?.character === item.character;
               const isLearned = learnedKanji.includes(item.character);
+              const rich = getModularKanjiByChar(item.character);
 
               return (
                 <button
@@ -171,7 +194,7 @@ export default function KanjiVaultPage() {
                   }`}
                 >
                   {isLearned && (
-                    <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-emerald-400" />
+                    <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-emerald-400" />
                   )}
                   <span className="text-3xl font-bold font-japanese mb-1">
                     {item.character}
@@ -179,6 +202,11 @@ export default function KanjiVaultPage() {
                   <span className="text-[10px] truncate max-w-full opacity-70">
                     {item.meanings.split(";")[0]}
                   </span>
+                  {rich?.meaningTa && (
+                    <span className="text-[9px] text-[#C83C50] truncate max-w-full font-medium opacity-90">
+                      {rich.meaningTa.split("/")[0]}
+                    </span>
+                  )}
                 </button>
               );
             })}
@@ -186,7 +214,7 @@ export default function KanjiVaultPage() {
         </div>
 
         {/* Right Column: Active Kanji Deep-Dive Card (5 cols) */}
-        <div className="lg:col-span-5 bg-[#101C35] border border-[#E8E0D5]/20 rounded-3xl p-6 sm:p-8 space-y-6 shadow-2xl sticky top-24">
+        <div className="lg:col-span-5 bg-[#101C35] border border-[#E8E0D5]/20 rounded-3xl p-6 sm:p-7 space-y-5 shadow-2xl sticky top-24">
           {selectedKanji ? (
             <>
               {/* Kanji Hero Showcase */}
@@ -201,8 +229,11 @@ export default function KanjiVaultPage() {
                         {selectedKanji.meanings}
                       </span>
                     </div>
-                    <div className="text-xs text-[#E8E0D5]/60 mt-1">
-                      JLPT Level: <span className="font-bold text-[#C83C50]">{activeLevel}</span>
+                    <div className="text-xs text-[#E8E0D5]/60 mt-1 flex items-center gap-2">
+                      <span>JLPT: <strong className="text-[#C83C50]">{activeLevel}</strong></span>
+                      {richEntry?.strokeCount && (
+                        <span>· 画数: <strong className="text-[#FFFFFF]">{richEntry.strokeCount}画</strong></span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -230,43 +261,151 @@ export default function KanjiVaultPage() {
                 </div>
               </div>
 
-              {/* Readings Section */}
-              <div className="space-y-3 pt-2">
-                <div className="p-4 rounded-xl bg-[#0B1323] border border-[#E8E0D5]/10 space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-[#C83C50]">
-                    訓読み · Kun&apos;yomi (Japanese Native)
-                  </div>
-                  <div className="text-sm font-semibold font-japanese text-[#FFFFFF]">
-                    {selectedKanji.kunyomi || "—"}
-                  </div>
+              {/* Verified Tamil Meaning Badge */}
+              {richEntry?.meaningTa && (
+                <div className="p-3 rounded-xl bg-[#C83C50]/10 border border-[#C83C50]/25 flex items-center justify-between text-xs">
+                  <span className="font-semibold text-[#E8E0D5]/80">தமிழ் பொருள்:</span>
+                  <span className="font-bold text-[#FFFFFF] text-sm">{richEntry.meaningTa}</span>
                 </div>
+              )}
 
-                <div className="p-4 rounded-xl bg-[#0B1323] border border-[#E8E0D5]/10 space-y-1">
-                  <div className="text-[10px] font-bold uppercase tracking-wider text-blue-400">
-                    音読み · On&apos;yomi (Sino-Japanese)
-                  </div>
-                  <div className="text-sm font-semibold font-japanese text-[#FFFFFF]">
-                    {selectedKanji.onyomi || "—"}
-                  </div>
-                </div>
+              {/* Badges: Radicals & Metadata */}
+              <div className="flex flex-wrap gap-2 text-[11px]">
+                {richEntry?.radical && (
+                  <span className="px-2.5 py-1 rounded-lg bg-[#E8E0D5]/10 text-[#E8E0D5] border border-[#E8E0D5]/15 font-medium">
+                    部首 (Radical): <strong className="text-[#FFFFFF]">{richEntry.radical.character}</strong> ({richEntry.radical.nameJa} · {richEntry.radical.nameEn})
+                  </span>
+                )}
+                {richEntry?.grade && (
+                  <span className="px-2.5 py-1 rounded-lg bg-[#E8E0D5]/10 text-[#E8E0D5] border border-[#E8E0D5]/15 font-medium">
+                    学年: <strong className="text-[#FFFFFF]">小学{richEntry.grade}年</strong>
+                  </span>
+                )}
               </div>
 
-              {/* Compound Reading Examples */}
-              <div className="p-4 rounded-xl bg-[#0B1323] border border-[#E8E0D5]/10 space-y-2">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-[#E8E0D5]/70">
-                  Compounds & Word Examples · 熟語
-                </div>
-                <div className="text-sm font-medium font-japanese text-[#FFFFFF] leading-relaxed">
-                  {selectedKanji.examples}
-                </div>
+              {/* View Switcher: Details vs Stroke Order Animator */}
+              <div className="flex items-center bg-[#0B1323] p-1 rounded-xl border border-[#E8E0D5]/15">
                 <button
-                  onClick={() => speakJapanese(selectedKanji.examples)}
-                  className="text-xs text-[#C83C50] hover:underline flex items-center space-x-1 pt-1"
+                  onClick={() => setActiveViewTab("details")}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    activeViewTab === "details"
+                      ? "bg-[#C83C50] text-[#FFFFFF] shadow-sm"
+                      : "text-[#E8E0D5]/70 hover:text-[#FFFFFF]"
+                  }`}
                 >
-                  <Volume2 className="w-3.5 h-3.5" />
-                  <span>Pronounce Examples</span>
+                  <BookOpen className="w-3.5 h-3.5" />
+                  <span>Readings & Compounds</span>
+                </button>
+                <button
+                  onClick={() => setActiveViewTab("strokes")}
+                  className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+                    activeViewTab === "strokes"
+                      ? "bg-[#C83C50] text-[#FFFFFF] shadow-sm"
+                      : "text-[#E8E0D5]/70 hover:text-[#FFFFFF]"
+                  }`}
+                >
+                  <PenTool className="w-3.5 h-3.5" />
+                  <span>Stroke Animator (書き順)</span>
                 </button>
               </div>
+
+              {activeViewTab === "strokes" ? (
+                /* Stroke Order Player & Practice Canvas */
+                <div className="pt-1">
+                  <KanjiStrokePlayer
+                    character={selectedKanji.character}
+                    strokeCount={richEntry?.strokeCount || 4}
+                    radical={richEntry?.radical.character}
+                    radicalName={richEntry ? `${richEntry.radical.nameJa} (${richEntry.radical.nameEn})` : undefined}
+                    onAudioPlay={() => speakJapanese(selectedKanji.character)}
+                  />
+                </div>
+              ) : (
+                /* Readings & Compounds View */
+                <div className="space-y-3">
+                  {/* Kun'yomi */}
+                  <div className="p-3.5 rounded-xl bg-[#0B1323] border border-[#E8E0D5]/10 space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-[#C83C50]">
+                      <span>訓読み · Kun&apos;yomi (Japanese Native)</span>
+                      {selectedKanji.kunyomi && selectedKanji.kunyomi !== "—" && (
+                        <button
+                          onClick={() => speakJapanese(selectedKanji.kunyomi)}
+                          className="hover:underline flex items-center gap-1 text-[#E8E0D5]/60 hover:text-[#C83C50]"
+                        >
+                          <Volume2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="text-sm font-semibold font-japanese text-[#FFFFFF]">
+                      {selectedKanji.kunyomi || "—"}
+                    </div>
+                  </div>
+
+                  {/* On'yomi */}
+                  <div className="p-3.5 rounded-xl bg-[#0B1323] border border-[#E8E0D5]/10 space-y-1">
+                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider text-blue-400">
+                      <span>音読み · On&apos;yomi (Sino-Japanese)</span>
+                      {selectedKanji.onyomi && selectedKanji.onyomi !== "—" && (
+                        <button
+                          onClick={() => speakJapanese(selectedKanji.onyomi)}
+                          className="hover:underline flex items-center gap-1 text-[#E8E0D5]/60 hover:text-blue-400"
+                        >
+                          <Volume2 className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    <div className="text-sm font-semibold font-japanese text-[#FFFFFF]">
+                      {selectedKanji.onyomi || "—"}
+                    </div>
+                  </div>
+
+                  {/* Compounds & Real Word Examples */}
+                  <div className="p-4 rounded-xl bg-[#0B1323] border border-[#E8E0D5]/10 space-y-2">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-[#E8E0D5]/70 flex items-center justify-between">
+                      <span>Compounds & Word Examples · 熟語</span>
+                      <button
+                        onClick={() => speakJapanese(selectedKanji.examples)}
+                        className="text-xs text-[#C83C50] hover:underline flex items-center gap-1"
+                      >
+                        <Volume2 className="w-3 h-3" />
+                        <span>Listen</span>
+                      </button>
+                    </div>
+
+                    {richEntry && richEntry.compounds.length > 0 ? (
+                      <div className="space-y-2 pt-1">
+                        {richEntry.compounds.map((comp, cIdx) => (
+                          <div
+                            key={cIdx}
+                            className="p-2.5 rounded-lg bg-[#101C35]/60 border border-[#E8E0D5]/10 flex items-center justify-between text-xs"
+                          >
+                            <div>
+                              <span className="font-bold font-japanese text-[#FFFFFF] text-sm mr-2">
+                                {comp.word}
+                              </span>
+                              <span className="text-[#E8E0D5]/70 text-xs mr-2">
+                                ({comp.reading})
+                              </span>
+                              <span className="text-[#E8E0D5]/90">
+                                {comp.meaningEn}
+                              </span>
+                            </div>
+                            {comp.meaningTa && (
+                              <span className="text-[10px] text-[#C83C50] font-medium ml-2 shrink-0">
+                                {comp.meaningTa}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="text-sm font-medium font-japanese text-[#FFFFFF] leading-relaxed">
+                        {selectedKanji.examples}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Status indicator */}
               <div className="pt-2 flex items-center justify-between text-xs text-[#E8E0D5]/60 border-t border-[#E8E0D5]/10">
