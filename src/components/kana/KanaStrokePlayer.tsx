@@ -41,6 +41,17 @@ export default function KanaStrokePlayer({
   const strokes: KanaStroke[] = getKanaStrokes(char, scriptType);
   const actualStrokeCount = strokes.length > 0 ? strokes.length : strokeCount;
 
+  // Yōon Detection & Component Calculation
+  const isYoon = char.length === 2;
+  const firstChar = isYoon ? char[0] : "";
+  const smallChar = isYoon ? char[1] : "";
+  const firstStrokesCount = isYoon
+    ? strokes.filter((s) => s.component === "first").length || (char[0] === "き" ? 3 : char[0] === "ぎ" ? 5 : 2)
+    : 0;
+  const smallStrokesCount = isYoon
+    ? strokes.filter((s) => s.component === "small").length || actualStrokeCount - firstStrokesCount
+    : 0;
+
   // Active Mode: 'animate' | 'practice' | 'freehand'
   const [mode, setMode] = useState<PlayerMode>("practice");
 
@@ -119,6 +130,7 @@ export default function KanaStrokePlayer({
         type: "error",
         message: t("script_feedback_retry"),
       });
+      clearCanvas();
       return;
     }
 
@@ -132,6 +144,7 @@ export default function KanaStrokePlayer({
         type: "error",
         message: t("script_feedback_start_near", practiceStep + 1),
       });
+      clearCanvas();
       return;
     }
 
@@ -157,6 +170,7 @@ export default function KanaStrokePlayer({
         type: "error",
         message: t("script_feedback_direction"),
       });
+      clearCanvas();
       return;
     }
 
@@ -289,13 +303,17 @@ export default function KanaStrokePlayer({
       {/* Top Header Card: Character, Romaji & Audio */}
       <div className="flex items-center justify-between pb-4 border-b border-[#E8E0D5]/15">
         <div className="flex items-center space-x-4">
-          <div className="w-16 h-16 rounded-2xl bg-[#0B1323] border border-[#E8E0D5]/25 flex items-center justify-center text-4xl font-black font-japanese text-[#FFFFFF] shadow-inner">
+          <div
+            className={`rounded-2xl bg-[#0B1323] border border-[#E8E0D5]/25 flex items-center justify-center font-black font-japanese text-[#FFFFFF] shadow-inner ${
+              isYoon ? "min-w-20 px-3 h-16 text-3xl tracking-wider" : "w-16 h-16 text-4xl"
+            }`}
+          >
             {char}
           </div>
           <div>
             <div className="text-sm font-bold text-[#FFFFFF] flex items-center space-x-2">
               <span className="text-xs text-[#E8E0D5]/60 font-normal">{t("script_romaji")}:</span>
-              <span className="text-[#C83C50] text-base font-mono">{romaji}</span>
+              <span className="text-[#C83C50] text-base font-mono font-bold">{romaji}</span>
             </div>
             <div className="text-xs text-[#E8E0D5]/70 mt-0.5">
               {t("script_stroke_count")}:{" "}
@@ -304,6 +322,17 @@ export default function KanaStrokePlayer({
               </span>{" "}
               · {t("script_stroke_order")}
             </div>
+            {isYoon && (
+              <div className="text-[11px] text-[#E8E0D5]/70 font-japanese mt-1 flex items-center space-x-1.5 bg-[#0B1323]/80 px-2 py-0.5 rounded-lg border border-[#E8E0D5]/10">
+                <span className="text-emerald-400 font-bold">{firstChar}</span>
+                <span className="text-[10px] text-[#E8E0D5]/50">({firstStrokesCount} {t("script_strokes_unit")})</span>
+                <span className="text-[10px] text-[#E8E0D5]/40">+</span>
+                <span className="text-amber-400 font-bold">{smallChar}</span>
+                <span className="text-[10px] text-[#E8E0D5]/50">({smallStrokesCount} {t("script_strokes_unit")})</span>
+                <span className="text-[10px] text-[#E8E0D5]/40">=</span>
+                <span className="text-[#FFFFFF] font-bold text-[10px]">{actualStrokeCount}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -374,6 +403,31 @@ export default function KanaStrokePlayer({
           <div className="w-full h-px border-b border-dashed border-[#E8E0D5]/15" />
           <div className="h-full w-px border-r border-dashed border-[#E8E0D5]/15 absolute" />
         </div>
+
+        {/* Yōon Component Separation Badge */}
+        {isYoon && (
+          <div className="absolute top-2.5 left-3 z-20 px-2 py-0.5 rounded-full bg-[#101C35]/90 border border-[#E8E0D5]/20 text-[10px] text-[#E8E0D5]/80 font-japanese flex items-center space-x-1.5 shadow pointer-events-none">
+            <span
+              className={
+                mode === "practice" && strokes[practiceStep]?.component === "small"
+                  ? "opacity-40"
+                  : "text-emerald-400 font-bold"
+              }
+            >
+              {firstChar} ({firstStrokesCount})
+            </span>
+            <span className="text-[#E8E0D5]/40">+</span>
+            <span
+              className={
+                mode === "practice" && strokes[practiceStep]?.component === "first"
+                  ? "opacity-40"
+                  : "text-amber-400 font-bold"
+              }
+            >
+              {smallChar} ({smallStrokesCount})
+            </span>
+          </div>
+        )}
 
         {/* Authentic SVG Stroke Animator & Guide Engine */}
         <svg
@@ -528,6 +582,11 @@ export default function KanaStrokePlayer({
               <span>
                 {t("script_step_indicator", practiceStep, actualStrokeCount)}
               </span>
+              {isYoon && practiceStep < strokes.length && (
+                <span className="text-[10px] text-[#C83C50] font-japanese border-l border-[#E8E0D5]/20 pl-1.5 font-bold">
+                  {strokes[practiceStep]?.component === "small" ? smallChar : firstChar}
+                </span>
+              )}
             </>
           ) : (
             <>

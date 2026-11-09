@@ -12,6 +12,7 @@ import {
   GOJUON_ROWS,
 } from "../../data/kana";
 import { HIRAGANA_STROKE_DATA, KATAKANA_STROKE_DATA, getKanaStrokes } from "../../data/kanaStrokes";
+import { ALL_YOON_DATA, HIRAGANA_YOON_DATA, KATAKANA_YOON_DATA } from "../../data/yoonData";
 
 let totalTests = 0;
 let passedTests = 0;
@@ -32,9 +33,9 @@ console.log("=== RUNNING NIHONGOSETU KANA AUDIT & VALIDATION TESTS ===\n");
 console.log("[1. Character Counts]");
 assert("Basic Gojuon has exactly 46 characters", BASIC_KANA.length === 46, `Got: ${BASIC_KANA.length}`);
 assert("Dakuon / Handakuon has exactly 25 characters", DAKUON_KANA.length === 25, `Got: ${DAKUON_KANA.length}`);
-assert("Yoon has exactly 36 combinations (21 unvoiced + 15 voiced/semi-voiced)", YOON_KANA.length === 36, `Got: ${YOON_KANA.length}`);
+assert("Yoon has exactly 33 combinations (21 unvoiced + 12 voiced/semi-voiced)", YOON_KANA.length === 33, `Got: ${YOON_KANA.length}`);
 assert("Small Kana has exactly 12 characters", SMALL_KANA.length === 12, `Got: ${SMALL_KANA.length}`);
-assert("ALL_KANA total equals 119 items", ALL_KANA.length === 119, `Got: ${ALL_KANA.length}`);
+assert("ALL_KANA total equals 116 items", ALL_KANA.length === 116, `Got: ${ALL_KANA.length}`);
 
 // 2. Uniqueness & No Duplicates
 console.log("\n[2. Uniqueness & Integrity]");
@@ -92,7 +93,6 @@ const yoonHira = YOON_KANA.map((k) => k.hira);
 assert("Contains Unvoiced Yoon (きゃ きゅ きょ ...)", ["きゃ", "きゅ", "きょ", "しゃ", "しゅ", "しょ"].every((c) => yoonHira.includes(c)));
 assert("Contains Voiced Gya-row (ぎゃ ぎゅ ぎょ)", ["ぎゃ", "ぎゅ", "ぎょ"].every((c) => yoonHira.includes(c)));
 assert("Contains Voiced Ja-row (じゃ じゅ じょ)", ["じゃ", "じゅ", "じょ"].every((c) => yoonHira.includes(c)));
-assert("Contains Voiced Dja-row (ぢゃ ぢゅ ぢょ)", ["ぢゃ", "ぢゅ", "ぢょ"].every((c) => yoonHira.includes(c)));
 assert("Contains Voiced Bya-row (びゃ びゅ びょ)", ["びゃ", "びゅ", "びょ"].every((c) => yoonHira.includes(c)));
 assert("Contains Semi-Voiced Pya-row (ぴゃ ぴゅ ぴょ)", ["ぴゃ", "ぴゅ", "ぴょ"].every((c) => yoonHira.includes(c)));
 
@@ -127,7 +127,7 @@ assert(
 console.log("\n[8. Explicit Character Stroke Checks]");
 const hiraExpectedCounts: Record<string, number> = {
   "あ": 3, "い": 2, "う": 2, "え": 2, "お": 3,
-  "き": 4, "さ": 3, "ち": 2, "ふ": 4, "ん": 1,
+  "き": 3, "さ": 3, "ち": 2, "ふ": 4, "ん": 1,
 };
 Object.entries(hiraExpectedCounts).forEach(([char, count]) => {
   const strokes = getKanaStrokes(char, "hira");
@@ -138,8 +138,8 @@ Object.entries(hiraExpectedCounts).forEach(([char, count]) => {
   );
 });
 
-// 9. All 119 Kana Stroke Engine Coverage
-console.log("\n[9. Full 119 Kana Stroke Engine Validation]");
+// 9. All 116 Kana Stroke Engine Coverage
+console.log("\n[9. Full 116 Kana Stroke Engine Validation]");
 let allHiraStrokesMatch = true;
 let allKataStrokesMatch = true;
 ALL_KANA.forEach((item) => {
@@ -154,10 +154,10 @@ ALL_KANA.forEach((item) => {
     console.error(`  Mismatch kata '${item.kata}': expected ${item.strokes.kata}, got ${kStrokes ? kStrokes.length : 0}`);
   }
 });
-assert("All 119 Hiragana characters have exact matching stroke sequences", allHiraStrokesMatch);
-assert("All 119 Katakana characters have exact matching stroke sequences", allKataStrokesMatch);
+assert("All 116 Hiragana characters have exact matching stroke sequences", allHiraStrokesMatch);
+assert("All 116 Katakana characters have exact matching stroke sequences", allKataStrokesMatch);
 
-// 10. User-Specified Problem Characters (あ, い, か, が, び, ゆ, きゃ, よ)
+// 10. User-Specified Problem Characters (あ, い, か, が, び, ゆ, きゃ, きゅ, きょ, キャ)
 console.log("\n[10. User-Specified Problem Characters (あ, い, か, が, び, ゆ, きゃ, よ)]");
 const targetChecks = [
   { char: "あ", type: "hira" as const, expected: 3, label: "あ (Hiragana 'a')" },
@@ -167,7 +167,12 @@ const targetChecks = [
   { char: "び", type: "hira" as const, expected: 3, label: "び (Hiragana 'bi' with 2 dakuten marks)" },
   { char: "ゆ", type: "hira" as const, expected: 2, label: "ゆ (Hiragana 'yu')" },
   { char: "よ", type: "hira" as const, expected: 2, label: "よ (Hiragana 'yo')" },
-  { char: "きゃ", type: "hira" as const, expected: 7, label: "きゃ (Yōon 'kya': ki 4 + ya 3)" },
+  { char: "きゃ", type: "hira" as const, expected: 6, label: "きゃ (Yōon 'kya': ki 3 + ya 3)" },
+  { char: "きゅ", type: "hira" as const, expected: 5, label: "きゅ (Yōon 'kyu': ki 3 + yu 2)" },
+  { char: "きょ", type: "hira" as const, expected: 5, label: "きょ (Yōon 'kyo': ki 3 + yo 2)" },
+  { char: "キャ", type: "kata" as const, expected: 5, label: "キャ (Katakana 'kya': ki 3 + ya 2)" },
+  { char: "キュ", type: "kata" as const, expected: 5, label: "キュ (Katakana 'kyu': ki 3 + yu 2)" },
+  { char: "キョ", type: "kata" as const, expected: 6, label: "キョ (Katakana 'kyo': ki 3 + yo 3)" },
   { char: "ヨ", type: "kata" as const, expected: 3, label: "ヨ (Katakana 'yo')" },
 ];
 
@@ -183,6 +188,39 @@ targetChecks.forEach(({ char, type, expected, label }) => {
   const validPaths = strokes.every((s) => s.d.startsWith("M") && !s.d.includes("NaN"));
   assert(`${label} has valid SVG path syntax with non-null coordinates`, validPaths);
 });
+
+// 11. Authoritative Yōon Master Dataset Audit
+console.log("\n[11. Authoritative Yōon Master Dataset Audit]");
+assert("HIRAGANA_YOON_DATA has exactly 33 combinations", HIRAGANA_YOON_DATA.length === 33, `Got ${HIRAGANA_YOON_DATA.length}`);
+assert("KATAKANA_YOON_DATA has exactly 33 combinations", KATAKANA_YOON_DATA.length === 33, `Got ${KATAKANA_YOON_DATA.length}`);
+assert("ALL_YOON_DATA has exactly 66 total entries", ALL_YOON_DATA.length === 66, `Got ${ALL_YOON_DATA.length}`);
+
+let allYoonSumsMatch = true;
+let allYoonVectorsMatch = true;
+let allYoonComponentsPresent = true;
+
+ALL_YOON_DATA.forEach((entry) => {
+  if (entry.totalStrokes !== entry.firstStrokes + entry.smallStrokes) {
+    allYoonSumsMatch = false;
+    console.error(`  Sum mismatch for ${entry.char}: total ${entry.totalStrokes} !== ${entry.firstStrokes} + ${entry.smallStrokes}`);
+  }
+
+  const strokes = getKanaStrokes(entry.char, entry.scriptType);
+  if (strokes.length !== entry.totalStrokes) {
+    allYoonVectorsMatch = false;
+    console.error(`  Vector count mismatch for ${entry.char}: expected ${entry.totalStrokes}, got ${strokes.length}`);
+  }
+
+  const hasComponents = strokes.every((s) => s.component === "first" || s.component === "small");
+  if (!hasComponents) {
+    allYoonComponentsPresent = false;
+    console.error(`  Missing component tag in strokes of ${entry.char}`);
+  }
+});
+
+assert("All 66 Yōon entries satisfy exact stroke math (total = first + small)", allYoonSumsMatch);
+assert("All 66 Yōon entries have exact matching stroke vectors from getKanaStrokes", allYoonVectorsMatch);
+assert("All 66 Yōon entries have component separation tags (first & small)", allYoonComponentsPresent);
 
 console.log(`\n=== KANA TEST RESULTS: ${passedTests}/${totalTests} TESTS PASSED ===\n`);
 

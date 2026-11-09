@@ -39,7 +39,7 @@ export const BASIC_KANA: KanaItem[] = [
 
   // Ka-Row
   { id: "kana-ka", hira: "か", kata: "カ", romaji: "ka", category: "basic", row: "ka", col: 0, strokes: { hira: 3, kata: 2 } },
-  { id: "kana-ki", hira: "き", kata: "キ", romaji: "ki", category: "basic", row: "ka", col: 1, strokes: { hira: 4, kata: 3 } },
+  { id: "kana-ki", hira: "き", kata: "キ", romaji: "ki", category: "basic", row: "ka", col: 1, strokes: { hira: 3, kata: 3 } },
   { id: "kana-ku", hira: "く", kata: "ク", romaji: "ku", category: "basic", row: "ka", col: 2, strokes: { hira: 1, kata: 2 } },
   { id: "kana-ke", hira: "け", kata: "ケ", romaji: "ke", category: "basic", row: "ka", col: 3, strokes: { hira: 3, kata: 3 } },
   { id: "kana-ko", hira: "こ", kata: "コ", romaji: "ko", category: "basic", row: "ka", col: 4, strokes: { hira: 2, kata: 2 } },
@@ -103,7 +103,7 @@ export const BASIC_KANA: KanaItem[] = [
 export const DAKUON_KANA: KanaItem[] = [
   // Ga-Row (が ぎ ぐ げ ご)
   { id: "kana-ga", hira: "が", kata: "ガ", romaji: "ga", category: "dakuon", row: "ga", col: 0, strokes: { hira: 5, kata: 4 } },
-  { id: "kana-gi", hira: "ぎ", kata: "ギ", romaji: "gi", category: "dakuon", row: "ga", col: 1, strokes: { hira: 6, kata: 5 } },
+  { id: "kana-gi", hira: "ぎ", kata: "ギ", romaji: "gi", category: "dakuon", row: "ga", col: 1, strokes: { hira: 5, kata: 5 } },
   { id: "kana-gu", hira: "ぐ", kata: "グ", romaji: "gu", category: "dakuon", row: "ga", col: 2, strokes: { hira: 3, kata: 4 } },
   { id: "kana-ge", hira: "げ", kata: "ゲ", romaji: "ge", category: "dakuon", row: "ga", col: 3, strokes: { hira: 5, kata: 5 } },
   { id: "kana-go", hira: "ご", kata: "ゴ", romaji: "go", category: "dakuon", row: "ga", col: 4, strokes: { hira: 4, kata: 4 } },
@@ -143,9 +143,9 @@ export const DAKUON_KANA: KanaItem[] = [
 // ------------------------------------------------------------------------------
 export const YOON_KANA: KanaItem[] = [
   // Kya-Row
-  { id: "yoon-kya", hira: "きゃ", kata: "キャ", romaji: "kya", category: "yoon", strokes: { hira: 7, kata: 5 } },
-  { id: "yoon-kyu", hira: "きゅ", kata: "キュ", romaji: "kyu", category: "yoon", strokes: { hira: 6, kata: 5 } },
-  { id: "yoon-kyo", hira: "きょ", kata: "キョ", romaji: "kyo", category: "yoon", strokes: { hira: 6, kata: 6 } },
+  { id: "yoon-kya", hira: "きゃ", kata: "キャ", romaji: "kya", category: "yoon", strokes: { hira: 6, kata: 5 } },
+  { id: "yoon-kyu", hira: "きゅ", kata: "キュ", romaji: "kyu", category: "yoon", strokes: { hira: 5, kata: 5 } },
+  { id: "yoon-kyo", hira: "きょ", kata: "キョ", romaji: "kyo", category: "yoon", strokes: { hira: 5, kata: 6 } },
 
   // Sha-Row
   { id: "yoon-sha", hira: "しゃ", kata: "シャ", romaji: "sha", category: "yoon", strokes: { hira: 4, kata: 5 } },
@@ -178,19 +178,14 @@ export const YOON_KANA: KanaItem[] = [
   { id: "yoon-ryo", hira: "りょ", kata: "リョ", romaji: "ryo", category: "yoon", strokes: { hira: 4, kata: 5 } },
 
   // Gya-Row (Voiced)
-  { id: "yoon-gya", hira: "ぎゃ", kata: "ギャ", romaji: "gya", category: "yoon", strokes: { hira: 9, kata: 7 } },
-  { id: "yoon-gyu", hira: "ぎゅ", kata: "ギュ", romaji: "gyu", category: "yoon", strokes: { hira: 8, kata: 7 } },
-  { id: "yoon-gyo", hira: "ぎょ", kata: "ギョ", romaji: "gyo", category: "yoon", strokes: { hira: 8, kata: 8 } },
+  { id: "yoon-gya", hira: "ぎゃ", kata: "ギャ", romaji: "gya", category: "yoon", strokes: { hira: 8, kata: 7 } },
+  { id: "yoon-gyu", hira: "ぎゅ", kata: "ギュ", romaji: "gyu", category: "yoon", strokes: { hira: 7, kata: 7 } },
+  { id: "yoon-gyo", hira: "ぎょ", kata: "ギョ", romaji: "gyo", category: "yoon", strokes: { hira: 7, kata: 8 } },
 
   // Ja-Row (Voiced)
   { id: "yoon-ja", hira: "じゃ", kata: "ジャ", romaji: "ja", category: "yoon", strokes: { hira: 6, kata: 7 } },
   { id: "yoon-ju", hira: "じゅ", kata: "ジュ", romaji: "ju", category: "yoon", strokes: { hira: 5, kata: 7 } },
   { id: "yoon-jo", hira: "じょ", kata: "ジョ", romaji: "jo", category: "yoon", strokes: { hira: 5, kata: 8 } },
-
-  // Dja-Row (Voiced ぢ)
-  { id: "yoon-dja", hira: "ぢゃ", kata: "ヂャ", romaji: "ja", category: "yoon", strokes: { hira: 7, kata: 7 } },
-  { id: "yoon-dju", hira: "ぢゅ", kata: "ヂュ", romaji: "ju", category: "yoon", strokes: { hira: 6, kata: 7 } },
-  { id: "yoon-djo", hira: "ぢょ", kata: "ヂョ", romaji: "jo", category: "yoon", strokes: { hira: 6, kata: 8 } },
 
   // Bya-Row (Voiced)
   { id: "yoon-bya", hira: "びゃ", kata: "ビャ", romaji: "bya", category: "yoon", strokes: { hira: 6, kata: 6 } },

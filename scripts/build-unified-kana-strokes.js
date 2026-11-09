@@ -3,7 +3,6 @@ const path = require('path');
 
 const rawData = JSON.parse(fs.readFileSync(path.join(__dirname, 'kanjivg-kana-raw.json'), 'utf-8'));
 
-// Generate TS file
 let ts = `// ==============================================================================
 // NIHONGOSETU — AUTHENTIC KANJIVG KANA STROKE ORDER & VECTOR ENGINE
 // Authoritative KanjiVG dataset (CC-BY-SA 3.0 Ulrich Apel / KanjiVG Project)
@@ -16,6 +15,8 @@ export interface KanaStroke {
   startPoint: { x: number; y: number };
   numberPoint?: { x: number; y: number };
   directionHint?: string;
+  component?: "first" | "small";
+  componentChar?: string;
 }
 
 export interface KanaStrokeData {
@@ -42,6 +43,9 @@ for (const [char, entry] of Object.entries(rawData)) {
     ts += `      startPoint: { x: ${s.startPoint.x}, y: ${s.startPoint.y} },\n`;
     if (s.numberPoint) {
       ts += `      numberPoint: { x: ${s.numberPoint.x}, y: ${s.numberPoint.y} },\n`;
+    }
+    if (s.directionHint) {
+      ts += `      directionHint: ${JSON.stringify(s.directionHint)},\n`;
     }
     ts += `    },\n`;
   }
@@ -154,7 +158,7 @@ export function getKanaStrokes(char: string, _scriptType?: "hira" | "kata"): Kan
 
     // Base character: 0.68 scale, positioned on left-center
     const baseScale = 0.68;
-    const baseOffsetX = 3;
+    const baseOffsetX = 4;
     const baseOffsetY = 16;
     baseStrokes.forEach((s) => {
       const startX = +(s.startPoint.x * baseScale + baseOffsetX).toFixed(2);
@@ -167,13 +171,15 @@ export function getKanaStrokes(char: string, _scriptType?: "hira" | "kata"): Kan
         startPoint: { x: startX, y: startY },
         numberPoint: { x: numX, y: numY },
         directionHint: s.directionHint,
+        component: "first",
+        componentChar: baseChar,
       });
     });
 
-    // Small kana component: 0.52 scale, positioned in lower-right quadrant
-    const smallScale = 0.52;
-    const smallOffsetX = 48;
-    const smallOffsetY = 36;
+    // Small kana component: 0.50 scale, positioned in lower-right quadrant
+    const smallScale = 0.50;
+    const smallOffsetX = 50;
+    const smallOffsetY = 38;
     smallStrokes.forEach((s) => {
       const startX = +(s.startPoint.x * smallScale + smallOffsetX).toFixed(2);
       const startY = +(s.startPoint.y * smallScale + smallOffsetY).toFixed(2);
@@ -185,6 +191,8 @@ export function getKanaStrokes(char: string, _scriptType?: "hira" | "kata"): Kan
         startPoint: { x: startX, y: startY },
         numberPoint: { x: numX, y: numY },
         directionHint: s.directionHint,
+        component: "small",
+        componentChar: smallChar,
       });
     });
 

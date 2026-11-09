@@ -264,6 +264,7 @@ export default function JapaneseScriptPage() {
               {YOON_KANA.map((item) => {
                 const char = scriptType === "hira" ? item.hira : item.kata;
                 const isSelected = selectedKana.id === item.id;
+                const itemStrokes = scriptType === "hira" ? item.strokes.hira : item.strokes.kata;
 
                 return (
                   <button
@@ -272,7 +273,7 @@ export default function JapaneseScriptPage() {
                       setSelectedKana(item);
                       speakKana(char);
                     }}
-                    className={`p-3.5 rounded-2xl flex flex-col items-center justify-center transition-all ${
+                    className={`p-3 rounded-2xl flex flex-col items-center justify-center transition-all ${
                       isSelected
                         ? "bg-[#C83C50] text-[#FFFFFF] shadow-lg shadow-[#C83C50]/30 scale-105 border border-[#FFFFFF]/40"
                         : "bg-[#0B1323] hover:bg-[#E8E0D5]/15 text-[#E8E0D5] border border-[#E8E0D5]/15"
@@ -281,8 +282,11 @@ export default function JapaneseScriptPage() {
                     <span className="text-2xl font-bold font-japanese leading-none mb-1 tracking-wider">
                       {char}
                     </span>
-                    <span className="text-[10px] font-mono opacity-70 leading-none">
+                    <span className="text-[11px] font-mono font-bold text-[#E8E0D5] leading-none mb-1">
                       {item.romaji}
+                    </span>
+                    <span className="text-[9px] font-mono opacity-60 leading-none">
+                      {itemStrokes} {t("script_strokes_unit")}
                     </span>
                   </button>
                 );

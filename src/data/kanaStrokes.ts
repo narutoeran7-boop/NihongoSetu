@@ -10,6 +10,8 @@ export interface KanaStroke {
   startPoint: { x: number; y: number };
   numberPoint?: { x: number; y: number };
   directionHint?: string;
+  component?: "first" | "small";
+  componentChar?: string;
 }
 
 export interface KanaStrokeData {
@@ -252,7 +254,7 @@ export const KANA_STROKE_MAP: Record<string, KanaStroke[]> = {
       numberPoint: { x: 79, y: 12.13 },
     },
   ],
-  // き (hira, 4 strokes)
+  // き (hira, 3 strokes)
   "き": [
     {
       index: 1,
@@ -268,18 +270,13 @@ export const KANA_STROKE_MAP: Record<string, KanaStroke[]> = {
     },
     {
       index: 3,
-      d: "M42,14.12c1.5,0.88,3.13,2.94,4,5.12c5.5,13.76,16,29.26,26.37,40.76c7.64,8.47,9.12,9.38-6,3.88",
+      d: "M42,14.12c1.5,0.88,3.13,2.94,4,5.12c5.5,13.76,16,29.26,26.37,40.76c3.5,3.8,2,8.5-5,14c-8.5,6.7-23,12-33.62,9.37c10.62,9.75,27.25,8.62,38.12,5",
       startPoint: { x: 42, y: 14.12 },
       numberPoint: { x: 32.5, y: 13 },
-    },
-    {
-      index: 4,
-      d: "M33.75,83.25c10.62,9.75,27.25,8.62,38.12,5",
-      startPoint: { x: 33.75, y: 83.25 },
-      numberPoint: { x: 24.5, y: 77 },
+      directionHint: "curve",
     },
   ],
-  // ぎ (hira, 6 strokes)
+  // ぎ (hira, 5 strokes)
   "ぎ": [
     {
       index: 1,
@@ -295,27 +292,24 @@ export const KANA_STROKE_MAP: Record<string, KanaStroke[]> = {
     },
     {
       index: 3,
-      d: "M42,14.38c1.5,0.88,3.13,2.94,4,5.12c5.5,13.75,16,29.25,26.38,40.75c7.64,8.47,9.12,9.38-6,3.88",
+      d: "M42,14.38c1.5,0.88,3.13,2.94,4,5.12c5.5,13.75,16,29.25,26.38,40.75c3.5,3.8,2,8.5-5,14c-8.5,6.7-23,12-33.62,9.37c10.62,9.75,27.25,8.62,38.12,5",
       startPoint: { x: 42, y: 14.38 },
       numberPoint: { x: 32.5, y: 13 },
+      directionHint: "curve",
     },
     {
       index: 4,
-      d: "M33.75,83.5c10.62,9.75,27.25,8.62,38.12,5",
-      startPoint: { x: 33.75, y: 83.5 },
-      numberPoint: { x: 24.5, y: 77 },
-    },
-    {
-      index: 5,
       d: "M77.37,19c2.75,1.75,6,5.38,7.75,8.5",
       startPoint: { x: 77.37, y: 19 },
       numberPoint: { x: 69.75, y: 18 },
+      directionHint: "down-right",
     },
     {
-      index: 6,
+      index: 5,
       d: "M83.75,14.12c3.06,1.57,6.68,4.82,8.62,7.62",
       startPoint: { x: 83.75, y: 14.12 },
       numberPoint: { x: 75.88, y: 12.88 },
+      directionHint: "down-right",
     },
   ],
   // く (hira, 1 strokes)
@@ -3616,7 +3610,7 @@ export function getKanaStrokes(char: string, _scriptType?: "hira" | "kata"): Kan
 
     // Base character: 0.68 scale, positioned on left-center
     const baseScale = 0.68;
-    const baseOffsetX = 3;
+    const baseOffsetX = 4;
     const baseOffsetY = 16;
     baseStrokes.forEach((s) => {
       const startX = +(s.startPoint.x * baseScale + baseOffsetX).toFixed(2);
@@ -3629,13 +3623,15 @@ export function getKanaStrokes(char: string, _scriptType?: "hira" | "kata"): Kan
         startPoint: { x: startX, y: startY },
         numberPoint: { x: numX, y: numY },
         directionHint: s.directionHint,
+        component: "first",
+        componentChar: baseChar,
       });
     });
 
-    // Small kana component: 0.52 scale, positioned in lower-right quadrant
-    const smallScale = 0.52;
-    const smallOffsetX = 48;
-    const smallOffsetY = 36;
+    // Small kana component: 0.50 scale, positioned in lower-right quadrant
+    const smallScale = 0.50;
+    const smallOffsetX = 50;
+    const smallOffsetY = 38;
     smallStrokes.forEach((s) => {
       const startX = +(s.startPoint.x * smallScale + smallOffsetX).toFixed(2);
       const startY = +(s.startPoint.y * smallScale + smallOffsetY).toFixed(2);
@@ -3647,6 +3643,8 @@ export function getKanaStrokes(char: string, _scriptType?: "hira" | "kata"): Kan
         startPoint: { x: startX, y: startY },
         numberPoint: { x: numX, y: numY },
         directionHint: s.directionHint,
+        component: "small",
+        componentChar: smallChar,
       });
     });
 
