@@ -14,6 +14,7 @@ const SUITES = [
   { name: "Grammar Formations & Tamil Translations", file: "src/lib/content/test-grammar.ts" },
   { name: "JLPT Mock Exams & Parity", file: "src/lib/content/test-exams.ts" },
   { name: "Localization & Feature Naming", file: "src/lib/content/test-i18n.ts" },
+  { name: "Universal Multilingual AI Sensei", file: "src/lib/sensei/test-multilingual.ts" },
 ];
 
 console.log("=================================================================");

@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
+import { detectLanguages } from "@/lib/sensei/languageDetector";
+import { buildSystemInstruction, validateResponseLanguage } from "@/lib/sensei/promptBuilder";
+import { getLanguageByCode } from "@/lib/sensei/languages";
 
 // Rate limiting in-memory store: IP -> array of timestamps
 const rateLimitMap = new Map<string, number[]>();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
-const MAX_REQUESTS_PER_WINDOW = 20;
+const MAX_REQUESTS_PER_WINDOW = 30;
 
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
@@ -31,147 +34,28 @@ function isRateLimited(ip: string): boolean {
   return false;
 }
 
-const DEFAULT_SYSTEM_PROMPT = `You are Nihongo AI Sensei (日本語節の先生), a warm, encouraging, and expert Japanese teacher on the NihongoSetu platform.
-Your mission is to help learners master Japanese from JLPT N5 to N1.
-
-Key Teaching Guidelines:
-1. Multilingual Support:
-   - Detect the learner's language naturally.
-   - You fluently understand and explain in English, Tamil (தமிழ்), Tanglish (Tamil in Latin script), Hindi (हिन्दी), Telugu (తెలుగు), Malayalam (മലയാളം), Kannada (ಕನ್ನಡ), Bengali, Marathi, Gujarati, Punjabi, Urdu, Odia, Japanese, Simplified/Traditional Chinese, Korean, Spanish, French, German, and Arabic.
-   - If the student writes in Tamil or Tanglish (e.g., "Sensei, wa kum ga kum enna difference?", "epdi padikanum?"), respond naturally in their language while keeping Japanese terminology crystal-clear.
-
-2. Authentic Japanese Structure:
-   - Always provide Kanji/Kana + Romaji + Natural Translation.
-   - Explain grammatical nuances (e.g., SOV order, particles, transitive vs. intransitive verbs).
-   - Distinguish polite (丁寧語 / です・ます), casual (ため口), and respectful Keigo (尊敬語・謙譲語) when relevant.
-
-3. Encouraging & Constructive Correction:
-   - When a student makes a mistake, gently explain why, show the natural Japanese alternative, and encourage them.
-   - For vocabulary and grammar, provide 1–2 practical, everyday example sentences.
-
-4. Application & Button Context:
-   - If the student asks about a button, feature, lesson, or stroke practice from the provided application context, explain the exact feature from the NihongoSetu interface accurately.`;
-
-const VOICE_CONVERSATION_SYSTEM_PROMPT = `You are Nihongo AI Sensei (日本語節の先生), a real-time spoken Japanese voice conversation tutor.
-You are talking out loud directly with your student in a 1-on-1 natural voice lesson.
-
-CRITICAL VOICE CONVERSATION DIRECTIVES:
-1. Spoken Brevity & Natural Dialogue:
-   - Your response will be SPOKEN ALOUD immediately to the student.
-   - Keep responses natural, warm, and concise: 1 to 3 sentences maximum (20 to 45 words).
-   - Use natural spoken Japanese affirmations (e.g., "はい！", "そうですね！", "なるほど！", "素晴らしい！").
-   - Always end with an engaging, friendly follow-up question to keep the voice conversation moving naturally.
-
-2. Multilingual & Adaptive:
-   - If the student speaks Japanese (e.g., 「こんにちは、先生！」), respond in natural Japanese suitable for their JLPT level (default N5: clean polite desu/masu).
-   - If the student speaks Tamil or Tanglish, seamlessly understand them and provide warm guidance with clear Japanese phrases.
-   - If the student speaks English, explain with natural spoken English and Japanese phrases.
-
-3. Natural Error Correction:
-   - If the student makes a particle, grammar, or vocabulary mistake, gently provide the natural Japanese expression in 1 spoken sentence.
-
-4. Pure Spoken Output (NO Markdown Clutter):
-   - Do NOT use markdown headings (###), bullet points (* ), horizontal dividers (---), or complex tables.
-   - Output clear, fluent, natural sentences formatted cleanly for speech synthesis.`;
-
-interface KnowledgeEntry {
-  keywords: string[];
-  reply: string;
+interface MultilingualVoiceGreeting {
+  code: string;
+  greeting: string;
 }
 
-const KNOWLEDGE_FALLBACKS: KnowledgeEntry[] = [
-  {
-    keywords: ["hello", "hi", "konnichiwa", "こんにちは", "வணக்கம்", "vanakkam", "namaste", "नमस्ते"],
-    reply: `こんにちは！ (Konnichiwa!) Welcome to NihongoSetu.
-
-I am Sensei, your Japanese language tutor. Whether you are learning Hiragana/Katakana stroke orders, JLPT N5 Kanji, core vocabulary, or grammar particles, I am here to guide you step-by-step.
-
-Feel free to ask questions in English, Tamil (தமிழ் / Tanglish), Hindi (हिन्दी), or Japanese! What would you like to explore today?`,
-  },
-  {
-    keywords: ["wa", "ga", "は", "が", "வித்தியாசம்"],
-    reply: `**は (wa) vs. が (ga)** is one of the most fundamental grammatical distinctions in Japanese:
-
-1. **は (wa) — Topic Marker:**
-   • Marks what the sentence is *about* (the overarching topic).
-   • Information *after* は is the new or important focus.
-   • Example: 私は学生です (Watashi wa gakusei desu) = *Speaking of me, I am a student.*
-   • Tamil / Tanglish: "என்னைப் பற்றிச் சொன்னால், நான் ஒரு மாணவன்."
-
-2. **が (ga) — Subject Marker (Identifier):**
-   • Identifies *who* or *what* specifically performs the action.
-   • Information *before* が is the key answer to "who?" or "which?".
-   • Example: だれが来ましたか？ 田中さんが来ました (Tanaka-san ga kimashita) = *Who came? Tanaka-san (specifically) came.*
-   • Tamil / Tanglish: "யார் வந்தார்? தனகா தான் வந்தார் (குறிப்பிட்டுச் சொல்கிறது)."
-
-**Quick Rule of Thumb:** If someone asks "Who did it?", use **が**. If introducing a general topic, use **は**.`,
-  },
-  {
-    keywords: ["te-form", "te form", "て形", "conjugat", "て-form"],
-    reply: `The Japanese て-form (Te-Form) links clauses, makes polite requests (〜てください), and expresses continuous action (〜ています).
-
-Conjugation guide for Group 1 (Godan) Verbs:
-• う, つ, る → って (買う → 買って / 待つ → 待って)
-• む, ぶ, ぬ → んで (飲む → 飲んで / 死ぬ → 死んで)
-• く → いて (書く → 書いて) ※ Exception: 行く → 行って
-• ぐ → いで (泳ぐ → 泳いで)
-• す → して (話す → 話して)
-
-Group 2 (Ichidan) Verbs: Drop る and add て:
-• 食べる → 食べて
-• 見る → 見て
-
-Irregular Verbs:
-• する → して
-• くる (来る) → きて (来て)`,
-  },
-  {
-    keywords: ["restaurant", "food", "dining", "order", "eat", "cafe", "menu"],
-    reply: `Essential Japanese dining phrases:
-
-1. すみません！ (Sumimasen!) — "Excuse me!" (Call the waiter's attention).
-2. これをください (Kore o kudasai) — "This one, please." (Pointing at the menu).
-3. お水をいただけますか？ (Omizu o itadakemasu ka?) — "Could I please have some water?"
-4. お会計をお願いします (O-kaikei o onegai shimasu) — "The check/bill, please."
-5. ごちそうさまでした！ (Gochisousama deshita!) — "Thank you for the delicious meal!" (Said to the staff when leaving).`,
-  },
-  {
-    keywords: ["kanji", "radical", "reading", "on-yomi", "kun-yomi", "onyomi", "kunyomi"],
-    reply: `Understanding Kanji Readings (音読み On-yomi vs 訓読み Kun-yomi):
-
-1. 音読み (On-yomi) — Chinese-derived phonetic readings:
-   • Used mostly in multi-kanji compound words (熟語 Jukugo).
-   • Example: 水 (SUI) in 水泳 (suiei - swimming).
-
-2. 訓読み (Kun-yomi) — Native Japanese readings:
-   • Used when the kanji stands alone as a word, often with okurigana (hiragana suffixes).
-   • Example: 水 (mizu - water).
-
-Study Tip: Learn kanji inside real vocabulary words rather than memorizing isolated readings!`,
-  },
-  {
-    keywords: ["particle", "particles", "助詞", "ni", "de", "wo", "to"],
-    reply: `Core Japanese Particles Overview:
-
-• を (o/wo): Direct object marker → 本を読む (Hon o yomu — Read a book)
-• に (ni): Specific time, destination, indirect object → 東京に行く (Toukyou ni iku — Go to Tokyo)
-• で (de): Location of an action, means/tool → 電車で行く (Densha de iku — Go by train)
-• と (to): "And" (exhaustive list), or "with" a person → 友達と話す (Tomodachi to hanasu — Talk with a friend)
-• も (mo): "Also" / "too" (replaces は/を) → 私も行きます (Watashi mo ikimasu — I will also go)`,
-  },
-  {
-    keywords: ["jlpt", "n5", "n4", "n3", "n2", "n1", "exam", "pass", "score"],
-    reply: `JLPT (Japanese-Language Proficiency Test) Level Overview:
-
-• N5 (Beginner): ~100 Kanji, ~800 Vocabulary. Basic Hiragana, Katakana, and daily expressions.
-• N4 (Elementary): ~300 Kanji, ~1,500 Vocabulary. Comprehension of everyday topics and basic conversations.
-• N3 (Intermediate): ~650 Kanji, ~3,750 Vocabulary. Bridge level to natural newspaper headlines and moderate speeds.
-• N2 (Pre-Advanced): ~1,000 Kanji, ~6,000 Vocabulary. Business Japanese, abstract articles, and natural dialogues.
-• N1 (Advanced): ~2,000+ Kanji, ~10,000+ Vocabulary. Nuanced native-level comprehension across technical/academic fields.
-
-Passing threshold on NihongoSetu mock exams is 70%. Consistency in daily flashcards and mock tests is key!`,
-  },
+const VOICE_GREETINGS: MultilingualVoiceGreeting[] = [
+  { code: "en", greeting: "Hello! I can hear you clearly. What Japanese concept or phrase would you like to practice today?" },
+  { code: "ta", greeting: "வணக்கம்! உங்கள் குரல் தெளிவாகக் கேட்கிறது. இன்று எந்த ஜப்பானிய வார்த்தை அல்லது இலக்கணத்தைப் பயிற்சி செய்யலாம்?" },
+  { code: "ja", greeting: "こんにちは！お声がしっかり聞こえましたよ。今日はどんな日本語について話しましょうか？" },
+  { code: "fr", greeting: "Bonjour ! Je vous entends très bien. Quel point de japonais souhaitez-vous explorer aujourd'hui ?" },
+  { code: "es", greeting: "¡Hola! Te escucho perfectamente. ¿Qué tema o frase de japonés te gustaría practicar hoy?" },
+  { code: "de", greeting: "Guten Tag! Ich kann Sie gut hören. Welche japanische Grammatik oder Redewendung möchten Sie heute üben?" },
+  { code: "hi", greeting: "नमस्ते! आपकी आवाज़ साफ़ सुनाई दे रही है। आज आप जापानी भाषा का कौन सा विषय सीखना चाहेंगे?" },
+  { code: "fil", greeting: "Kamusta! Naririnig kita nang malinaw. Anong salita o gramatika sa Hapon ang nais mong aralin ngayon?" },
+  { code: "ru", greeting: "Здравствуйте! Я вас прекрасно слышу. Какую тему японского языка вы хотите сегодня разобрать?" },
+  { code: "ar", greeting: "مرحباً! أستمع إليك بوضوح. ما هو موضوع اللغة اليابانية الذي تود ممارسته اليوم؟" },
 ];
+
+function getVoiceFallback(langCode: string): string {
+  const match = VOICE_GREETINGS.find((g) => g.code === langCode);
+  return match ? match.greeting : VOICE_GREETINGS[0].greeting;
+}
 
 export async function POST(req: NextRequest) {
   // 1. Authentication Check (Require authenticated learner or admin session)
@@ -213,9 +97,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 2. Parse request payload
+  // 3. Parse request payload
   let prompt = "";
-  let instructions = DEFAULT_SYSTEM_PROMPT;
+  let mode: "text" | "voice_conversation" = "text";
+  let requestedInputLang = "auto";
+  let requestedExplanationLang = "en";
+  let requestedConversationLang = "auto";
+  let requestedVoiceLang = "follow_explanation";
+  let customInstructions = "";
   let contextInfo = "";
 
   try {
@@ -230,13 +119,28 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const isVoiceMode = body.mode === "voice_conversation";
-    if (isVoiceMode && !body.instructions) {
-      instructions = VOICE_CONVERSATION_SYSTEM_PROMPT;
+    if (body.mode === "voice_conversation") {
+      mode = "voice_conversation";
+    }
+
+    if (body.inputLanguage && typeof body.inputLanguage === "string") {
+      requestedInputLang = body.inputLanguage;
+    }
+
+    if (body.explanationLanguage && typeof body.explanationLanguage === "string") {
+      requestedExplanationLang = body.explanationLanguage;
+    }
+
+    if (body.conversationLanguage && typeof body.conversationLanguage === "string") {
+      requestedConversationLang = body.conversationLanguage;
+    }
+
+    if (body.voiceOutputLanguage && typeof body.voiceOutputLanguage === "string") {
+      requestedVoiceLang = body.voiceOutputLanguage;
     }
 
     if (body.instructions && typeof body.instructions === "string") {
-      instructions = body.instructions;
+      customInstructions = body.instructions;
     }
 
     if (body.context && typeof body.context === "object") {
@@ -249,7 +153,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 3. Validation
+  // 4. Validation
   if (!prompt) {
     return NextResponse.json(
       { error: "Prompt cannot be empty." },
@@ -257,14 +161,42 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  if (prompt.length > 1000) {
+  if (prompt.length > 1500) {
     return NextResponse.json(
-      { error: "Prompt is too long (maximum 1000 characters)." },
+      { error: "Prompt is too long (maximum 1500 characters)." },
       { status: 400 }
     );
   }
 
-  // 4. Google GenAI SDK Integration (Server-side via GEMINI_API_KEY environment variable)
+  // 5. Explicit Language Request Detection (Highest Priority)
+  const detection = detectLanguages(prompt);
+  let effectiveExplanationLang = requestedExplanationLang;
+
+  if (detection.isExplicit && detection.explicitExplanationLanguage) {
+    // Explicit user directive in prompt takes highest priority!
+    effectiveExplanationLang = detection.explicitExplanationLanguage;
+  } else if (requestedExplanationLang === "auto" || !requestedExplanationLang) {
+    // If set to auto, use detected input language unless user spoke Japanese, in which case default explanation is English
+    effectiveExplanationLang = detection.detectedInputLanguage === "ja" ? "en" : detection.detectedInputLanguage;
+  }
+
+  // Determine effective voice output language
+  let effectiveVoiceLang = requestedVoiceLang;
+  if (requestedVoiceLang === "follow_explanation" || !requestedVoiceLang) {
+    effectiveVoiceLang = effectiveExplanationLang;
+  } else if (requestedVoiceLang === "follow_conversation") {
+    effectiveVoiceLang = requestedConversationLang === "auto" ? effectiveExplanationLang : requestedConversationLang;
+  }
+
+  const { instructions, targetLang } = buildSystemInstruction({
+    mode,
+    inputLanguage: requestedInputLang === "auto" ? detection.detectedInputLanguage : requestedInputLang,
+    explanationLanguage: effectiveExplanationLang,
+    conversationLanguage: requestedConversationLang,
+    customInstructions,
+  });
+
+  // 6. Google GenAI SDK Integration (Server-side via GEMINI_API_KEY environment variable)
   const geminiApiKey = process.env.GEMINI_API_KEY?.trim();
   const isKeyConfigured = Boolean(
     geminiApiKey &&
@@ -272,7 +204,7 @@ export async function POST(req: NextRequest) {
     geminiApiKey.length > 10
   );
 
-  const isVoiceMode = Boolean(instructions === VOICE_CONVERSATION_SYSTEM_PROMPT);
+  const isVoiceMode = mode === "voice_conversation";
 
   if (isKeyConfigured && geminiApiKey) {
     const fullUserPrompt = contextInfo ? `${prompt}${contextInfo}` : prompt;
@@ -290,11 +222,40 @@ export async function POST(req: NextRequest) {
         },
       });
 
-      const candidateText = response.text?.trim();
+      let candidateText = response.text?.trim();
+
+      // 7. Response Language Validation (Requirement 11)
       if (candidateText) {
+        const validation = validateResponseLanguage(candidateText, effectiveExplanationLang);
+        if (!validation.isValid && effectiveExplanationLang !== "ja") {
+          // Perform 1 controlled retry enforcing the requested explanation language
+          try {
+            const retryResponse = await ai.models.generateContent({
+              model: targetModel,
+              contents: `${fullUserPrompt}\n\n[MANDATORY CORRECTION: You must provide the explanation in ${targetLang.name} (${targetLang.nativeName}). Do not write solely in Japanese.]`,
+              config: {
+                systemInstruction: instructions,
+                temperature: 0.5,
+                maxOutputTokens: isVoiceMode ? 450 : 1200,
+              },
+            });
+            const retriedText = retryResponse.text?.trim();
+            if (retriedText) {
+              candidateText = retriedText;
+            }
+          } catch {
+            // Keep candidateText if retry failed
+          }
+        }
+
         return NextResponse.json({
           reply: candidateText,
           source: "gemini",
+          detectedInputLanguage: detection.detectedInputLanguage,
+          explanationLanguage: effectiveExplanationLang,
+          explanationLanguageName: targetLang.name,
+          voiceOutputLanguage: effectiveVoiceLang,
+          isExplicit: detection.isExplicit,
         });
       }
     } catch {
@@ -315,48 +276,113 @@ export async function POST(req: NextRequest) {
           return NextResponse.json({
             reply: candidateText,
             source: "gemini",
+            detectedInputLanguage: detection.detectedInputLanguage,
+            explanationLanguage: effectiveExplanationLang,
+            explanationLanguageName: targetLang.name,
+            voiceOutputLanguage: effectiveVoiceLang,
+            isExplicit: detection.isExplicit,
           });
         }
       } catch {
-        // Fallback gracefully to local intelligent knowledge bank without exposing errors or keys
+        // Fallback gracefully to multilingual knowledge bank
       }
     }
   }
 
-  // 5. Intelligent Pedagogical Fallback
+  // 8. Pedagogical Multilingual Fallback
   if (isVoiceMode) {
     return NextResponse.json({
-      reply: "こんにちは！お声がしっかり聞こえましたよ。今日はどんな日本語について話しましょうか？",
+      reply: getVoiceFallback(effectiveExplanationLang),
       source: "fallback",
+      detectedInputLanguage: detection.detectedInputLanguage,
+      explanationLanguage: effectiveExplanationLang,
+      explanationLanguageName: targetLang.name,
+      voiceOutputLanguage: effectiveVoiceLang,
+      isExplicit: detection.isExplicit,
     });
   }
-  const lowerPrompt = prompt.toLowerCase();
-  for (const entry of KNOWLEDGE_FALLBACKS) {
-    if (entry.keywords.some((kw) => lowerPrompt.includes(kw.toLowerCase()))) {
-      return NextResponse.json({
-        reply: entry.reply,
-        source: "fallback",
-      });
-    }
-  }
 
-  // Generic encouraging tutor response
-  const genericReply = `こんにちは！ That is an insightful question about Japanese language learning.
+  // Text mode fallback tailored to requested explanation language
+  let fallbackReply = "";
+  if (effectiveExplanationLang === "ta") {
+    fallbackReply = `வணக்கம்! ஜப்பானிய மொழியைக் கற்றுக்கொள்வதில் உங்கள் ஆர்வம் மிகச் சிறந்தது.
 
-In Japanese, always keep the fundamental sentence structure in mind:
+ஜப்பானிய மொழியின் அடிப்படை வாக்கிய அமைப்பை எப்போதும் நினைவில் கொள்ளுங்கள்:
+• பொருள் / தலைப்பு (Topic): は (wa) அல்லது が (ga)
+• செயப்படுபொருள் (Object): を (o/wo)
+• வினைச்சொல் (Verb): எப்போதும் வாக்கியத்தின் இறுதியில் வரும்
+
+உதாரணம்:
+私は日本語を勉強しています。
+(Watashi wa nihongo o benkyou shite imasu.)
+"நான் ஜப்பானிய மொழியைப் படித்துக் கொண்டிருக்கிறேன்."
+
+உங்களுக்கு குறிப்பிட்ட உதாரண வாக்கியங்கள் வேண்டுமா அல்லது இலக்கண விதியை விரிவாகப் பார்க்கலாமா?`;
+  } else if (effectiveExplanationLang === "ja") {
+    fallbackReply = `こんにちは！日本語の学習、とても素晴らしいですね。
+
+日本語の基本文型をしっかり覚えておきましょう：
+• 主語・主題：は (wa) または が (ga)
+• 目的語：を (o/wo)
+• 動詞：文の最後に置かれます
+
+例文：
+私は日本語を勉強しています。
+(Watashi wa nihongo o benkyou shite imasu.)
+
+具体的な例文や、文法の詳しい解説についてもっと練習しましょうか？`;
+  } else if (effectiveExplanationLang === "fr") {
+    fallbackReply = `Bonjour ! C'est une excellente question sur l'apprentissage du japonais.
+
+En japonais, gardez toujours en tête la structure fondamentale de la phrase (SOV) :
+• Sujet / Thème : Marqué par は (wa) ou が (ga)
+• Objet : Marqué par を (o/wo)
+• Verbe : Toujours placé à la toute fin de la proposition
+
+Exemple :
+私は日本語を勉強しています。
+(Watashi wa nihongo o benkyou shite imasu.)
+"J'étudie le japonais."
+
+Souhaitez-vous d'autres exemples ou des explications détaillées ?`;
+  } else if (effectiveExplanationLang === "es") {
+    fallbackReply = `¡Hola! Esa es una excelente pregunta sobre el aprendizaje del japonés.
+
+En japonés, recuerda siempre el orden básico de la oración (SOV):
+• Sujeto / Tema: Marcado por は (wa) o が (ga)
+• Objeto: Marcado por を (o/wo)
+• Verbo: Siempre va al final de la oración
+
+Ejemplo:
+私は日本語を勉強しています。
+(Watashi wa nihongo o benkyou shite imasu.)
+"Estoy estudiando japonés."
+
+¿Te gustaría ver más ejemplos prácticos o repasar algún punto gramatical?`;
+  } else {
+    // English default fallback
+    fallbackReply = `Hello! Welcome to NihongoSetu. That is an insightful question about Japanese language learning.
+
+In Japanese, always keep the fundamental sentence structure (SOV) in mind:
 • Subject / Topic: Marked by は (wa) or が (ga)
-• Object: Marked by を (o/wo)
-• Verb: Always placed at the end of the clause
+• Direct Object: Marked by を (o/wo)
+• Verb: Placed at the end of the clause
 
 Example:
 私は日本語を勉強しています。
 (Watashi wa nihongo o benkyou shite imasu.)
 "I am studying Japanese."
 
-Would you like to explore specific example sentences, practice conjugations, or dive into JLPT exam questions for your target level?`;
+Would you like to explore specific example sentences, practice conjugations, or dive into JLPT questions for your target level?`;
+  }
 
   return NextResponse.json({
-    reply: genericReply,
+    reply: fallbackReply,
     source: "fallback",
+    detectedInputLanguage: detection.detectedInputLanguage,
+    explanationLanguage: effectiveExplanationLang,
+    explanationLanguageName: targetLang.name,
+    voiceOutputLanguage: effectiveVoiceLang,
+    isExplicit: detection.isExplicit,
   });
 }

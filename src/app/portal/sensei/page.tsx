@@ -31,6 +31,8 @@ import {
   Info,
 } from "lucide-react";
 import { getStudentProfile, DEFAULT_PROFILE, StudentProfile } from "@/lib/storage/studentState";
+import { useSensei } from "@/lib/sensei/SenseiContext";
+import { UNIVERSAL_LANGUAGES, getLanguageByCode } from "@/lib/sensei/languages";
 
 interface ChatMessage {
   id: string;
@@ -179,6 +181,7 @@ function cleanMarkdownForSpeech(md: string): string {
 }
 
 export default function AISenseiPage() {
+  const { settings, updateSettings, activeLanguage } = useSensei();
   const counterRef = useRef(1);
   const [messages, setMessages] = useState<ChatMessage[]>(INITIAL_MESSAGES);
   const [input, setInput] = useState("");
@@ -392,23 +395,27 @@ export default function AISenseiPage() {
       const utterance = new SpeechSynthesisUtterance(cleaned);
       utterance.rate = speechRate;
 
-      // Detect predominant language script
-      const hasJapanese = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/.test(cleaned);
-      const hasTamil = /[\u0b80-\u0bff]/.test(cleaned);
+      // Determine speech synthesis language from multilingual settings
+      const targetVoiceLangCode =
+        settings.voiceOutputLanguage === "follow_explanation"
+          ? settings.explanationLanguage
+          : settings.voiceOutputLanguage === "follow_conversation"
+          ? (settings.conversationLanguage === "auto" ? settings.explanationLanguage : settings.conversationLanguage)
+          : settings.voiceOutputLanguage;
+
+      const langInfo = getLanguageByCode(targetVoiceLangCode);
+      const targetSpeechCode = langInfo?.speechCode || "en-US";
+      utterance.lang = targetSpeechCode;
 
       const voices = window.speechSynthesis.getVoices();
-      if (hasJapanese) {
-        utterance.lang = "ja-JP";
-        const jaVoice = voices.find((v) => v.lang.startsWith("ja"));
-        if (jaVoice) utterance.voice = jaVoice;
-      } else if (hasTamil) {
-        utterance.lang = "ta-IN";
-        const taVoice = voices.find((v) => v.lang.startsWith("ta"));
-        if (taVoice) utterance.voice = taVoice;
-      } else {
-        utterance.lang = "en-US";
-        const enVoice = voices.find((v) => v.lang.startsWith("en"));
-        if (enVoice) utterance.voice = enVoice;
+      const matchedVoice = voices.find(
+        (v) =>
+          v.lang === targetSpeechCode ||
+          v.lang.startsWith(targetVoiceLangCode) ||
+          (langInfo?.alternateSpeechCodes && langInfo.alternateSpeechCodes.includes(v.lang))
+      );
+      if (matchedVoice) {
+        utterance.voice = matchedVoice;
       }
 
       utterance.onstart = () => {
@@ -461,7 +468,11 @@ export default function AISenseiPage() {
 
     try {
       const recognition = new SpeechRec();
-      recognition.lang = speechLang;
+      const inputLangCode =
+        settings.inputLanguage === "auto"
+          ? (activeLanguage?.speechCode || speechLang)
+          : (getLanguageByCode(settings.inputLanguage)?.speechCode || speechLang);
+      recognition.lang = inputLangCode;
       recognition.continuous = false;
       recognition.interimResults = true;
       recognition.maxAlternatives = 1;
@@ -546,6 +557,10 @@ export default function AISenseiPage() {
         body: JSON.stringify({
           prompt: spokenText,
           mode: "voice_conversation",
+          inputLanguage: settings.inputLanguage,
+          explanationLanguage: settings.explanationLanguage,
+          conversationLanguage: settings.conversationLanguage,
+          voiceOutputLanguage: settings.voiceOutputLanguage,
           context: {
             currentRoute: "/portal/sensei",
             pageTitle: "AI Sensei Live Voice Studio",
@@ -619,8 +634,32 @@ export default function AISenseiPage() {
       return;
     }
 
-    // Step 2: Sensei initiates natural spoken greeting
-    const welcomeGreeting = "こんにちは！日本語節のAI先生です。今日はどんな日本語について話しましょうか？";
+    // Step 2: Sensei initiates natural spoken greeting tailored to configured explanation language
+    const getWelcomeGreeting = (code: string) => {
+      switch (code) {
+        case "ta":
+          return "வணக்கம்! நான் உங்கள் ஜப்பானிய AI ஆசிரியர். இன்று என்ன பயிற்சி செய்யலாம்?";
+        case "ja":
+          return "こんにちは！日本語節のAI先生です。今日はどんな日本語について話しましょうか？";
+        case "fr":
+          return "Bonjour ! Je suis votre Sensei de japonais. Quel point souhaitez-vous pratiquer aujourd'hui ?";
+        case "es":
+          return "¡Hola! Soy tu Sensei de japonés. ¿Qué te gustaría practicar hoy?";
+        case "de":
+          return "Guten Tag! Ich bin Ihr Japanisch-Sensei. Was möchten Sie heute üben?";
+        case "hi":
+          return "नमस्ते! मैं आपका जापानी शिक्षक हूँ। आज आप क्या सीखना चाहेंगे?";
+        case "fil":
+          return "Kamusta! Ako ang iyong AI Sensei sa Nihongo. Anong aralin ang gusto mong sanayin ngayon?";
+        case "ru":
+          return "Здравствуйте! Я ваш преподаватель японского языка. Что вы хотите разобрать сегодня?";
+        case "ar":
+          return "مرحباً! أنا معلمك للغة اليابانية. ما الذي تود ممارسته اليوم؟";
+        default:
+          return "Hello! I am Nihongo AI Sensei. What Japanese concept or phrase would you like to practice today?";
+      }
+    };
+    const welcomeGreeting = getWelcomeGreeting(settings.explanationLanguage);
     speakSenseiResponse(welcomeGreeting, () => {
       // Step 3: Automatically listen to student's response!
       setVoiceState("listening");
@@ -677,6 +716,11 @@ export default function AISenseiPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: query,
+          mode: "text",
+          inputLanguage: settings.inputLanguage,
+          explanationLanguage: settings.explanationLanguage,
+          conversationLanguage: settings.conversationLanguage,
+          voiceOutputLanguage: settings.voiceOutputLanguage,
           context: {
             currentRoute: "/portal/sensei",
             pageTitle: "AI Sensei Chat",
@@ -788,7 +832,24 @@ Would you like to explore specific example sentences, practice verb conjugations
     window.speechSynthesis.cancel();
     const cleaned = cleanMarkdownForSpeech(text);
     const utterance = new SpeechSynthesisUtterance(cleaned);
-    utterance.lang = /[\u3040-\u30ff]/.test(cleaned) ? "ja-JP" : "en-US";
+    const targetVoiceLangCode =
+      settings.voiceOutputLanguage === "follow_explanation"
+        ? settings.explanationLanguage
+        : settings.voiceOutputLanguage === "follow_conversation"
+        ? (settings.conversationLanguage === "auto" ? settings.explanationLanguage : settings.conversationLanguage)
+        : settings.voiceOutputLanguage;
+    const langInfo = getLanguageByCode(targetVoiceLangCode);
+    utterance.lang = langInfo?.speechCode || "en-US";
+    const voices = window.speechSynthesis.getVoices();
+    const matchedVoice = voices.find(
+      (v) =>
+        v.lang === utterance.lang ||
+        v.lang.startsWith(targetVoiceLangCode) ||
+        (langInfo?.alternateSpeechCodes && langInfo.alternateSpeechCodes.includes(v.lang))
+    );
+    if (matchedVoice) {
+      utterance.voice = matchedVoice;
+    }
     utterance.rate = speechRate;
     utterance.onstart = () => {
       setSpeakingMsgId(msgId);
@@ -855,6 +916,117 @@ Would you like to explore specific example sentences, practice verb conjugations
         </div>
       </div>
 
+      {/* Universal Multilingual Configuration Hub */}
+      <div className="bg-[#0B1323] border border-[#E8E0D5]/20 rounded-2xl p-4 sm:p-5 shadow-xl space-y-3.5">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-[#E8E0D5]/10 pb-3">
+          <div className="flex items-center space-x-2">
+            <Languages className="w-4 h-4 text-cyan-400" />
+            <span className="text-xs font-bold text-white uppercase tracking-wider">
+              Multilingual Intelligence &amp; Language Independence
+            </span>
+          </div>
+          <div className="text-[11px] text-[#E8E0D5]/70 flex items-center gap-1.5">
+            <span>Explanation Language:</span>
+            <span className="px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-bold border border-cyan-500/30">
+              {activeLanguage.name} ({activeLanguage.nativeName})
+            </span>
+          </div>
+        </div>
+
+        {/* Quick Language Switch Badges */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-[11px] text-[#E8E0D5]/60">
+            <span>Click to switch Sensei&apos;s explanation language instantly:</span>
+            <span className="text-[10px] text-cyan-400/80">Independent of what you speak or type</span>
+          </div>
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1 text-xs">
+            {[
+              { code: "en", label: "English", flag: "🇬🇧" },
+              { code: "ta", label: "தமிழ்", flag: "🇮🇳" },
+              { code: "ja", label: "日本語", flag: "🇯🇵" },
+              { code: "fr", label: "Français", flag: "🇫🇷" },
+              { code: "es", label: "Español", flag: "🇪🇸" },
+              { code: "hi", label: "हिन्दी", flag: "🇮🇳" },
+              { code: "de", label: "Deutsch", flag: "🇩🇪" },
+              { code: "fil", label: "Filipino", flag: "🇵🇭" },
+              { code: "ru", label: "Русский", flag: "🇷🇺" },
+              { code: "ar", label: "العربية", flag: "🇸🇦" },
+            ].map((pill) => (
+              <button
+                key={pill.code}
+                onClick={() => updateSettings({ explanationLanguage: pill.code })}
+                className={`px-3 py-1.5 rounded-xl font-semibold flex items-center space-x-1.5 whitespace-nowrap transition-all ${
+                  settings.explanationLanguage === pill.code
+                    ? "bg-[#C83C50] text-white shadow-md shadow-[#C83C50]/30 scale-105 ring-2 ring-white/20"
+                    : "bg-[#101C35] text-[#E8E0D5]/75 hover:text-white hover:bg-[#152342] border border-[#E8E0D5]/15"
+                }`}
+              >
+                <span>{pill.flag}</span>
+                <span>{pill.label}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Independent Language Settings Controls */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1 text-xs">
+          <div>
+            <label className="block text-[10px] font-bold uppercase text-[#E8E0D5]/60 mb-1">
+              1. Input Language (What you speak/type)
+            </label>
+            <select
+              value={settings.inputLanguage}
+              onChange={(e) => updateSettings({ inputLanguage: e.target.value })}
+              className="w-full bg-[#101C35] border border-[#E8E0D5]/20 text-white rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#C83C50]"
+            >
+              <option value="auto">Auto-detect (Universal)</option>
+              {UNIVERSAL_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.name} ({l.nativeName})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold uppercase text-[#E8E0D5]/60 mb-1">
+              2. Explanation Language (How Sensei teaches)
+            </label>
+            <select
+              value={settings.explanationLanguage}
+              onChange={(e) => updateSettings({ explanationLanguage: e.target.value })}
+              className="w-full bg-[#101C35] border border-[#E8E0D5]/20 text-white rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#C83C50]"
+            >
+              {UNIVERSAL_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.name} ({l.nativeName})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-[10px] font-bold uppercase text-[#E8E0D5]/60 mb-1">
+              3. Voice Output Language (Spoken Voice)
+            </label>
+            <select
+              value={settings.voiceOutputLanguage}
+              onChange={(e) => updateSettings({ voiceOutputLanguage: e.target.value })}
+              className="w-full bg-[#101C35] border border-[#E8E0D5]/20 text-white rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#C83C50]"
+            >
+              <option value="follow_explanation">Follow Explanation Language</option>
+              <option value="follow_conversation">Follow Conversation Practice</option>
+              <option value="none">Mute Spoken Audio</option>
+              {UNIVERSAL_LANGUAGES.map((l) => (
+                <option key={l.code} value={l.code}>
+                  {l.name} ({l.nativeName})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
       {/* Recognition Error Notice */}
       {recognitionError && (
         <div className="px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between shadow-lg">
@@ -904,19 +1076,9 @@ Would you like to explore specific example sentences, practice verb conjugations
             </div>
 
             <div className="flex items-center space-x-2">
-              {/* Language Selector */}
-              <select
-                value={speechLang}
-                onChange={(e) => setSpeechLang(e.target.value)}
-                className="bg-[#101C35] border border-[#E8E0D5]/20 text-[#FFFFFF] text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#C83C50]"
-                title="Spoken Language"
-              >
-                {SPEECH_LANGUAGES.map((lang) => (
-                  <option key={lang.code} value={lang.code} className="bg-[#101C35] text-[#FFFFFF]">
-                    {lang.flag} {lang.label}
-                  </option>
-                ))}
-              </select>
+              <span className="text-[11px] text-[#E8E0D5]/70 bg-[#101C35] px-2.5 py-1.5 rounded-xl border border-[#E8E0D5]/20 font-medium hidden sm:inline-flex items-center gap-1">
+                Voice: <strong className="text-cyan-300">{activeLanguage.name}</strong>
+              </span>
 
               {/* Speed Selector */}
               <select

@@ -2,7 +2,9 @@ import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AuthProvider } from "@/lib/auth/authContext";
 import { LanguageProvider } from "@/lib/i18n/LanguageContext";
+import { SenseiProvider } from "@/lib/sensei/SenseiContext";
 import SplashScreen from "@/components/common/SplashScreen";
+import FloatingSensei from "@/components/sensei/FloatingSensei";
 
 export const viewport: Viewport = {
   themeColor: "#C83C50",
@@ -63,7 +65,12 @@ export default function RootLayout({
       <body className="antialiased selection:bg-[#C83C50] selection:text-[#FFFFFF]">
         <SplashScreen />
         <AuthProvider>
-          <LanguageProvider>{children}</LanguageProvider>
+          <LanguageProvider>
+            <SenseiProvider>
+              {children}
+              <FloatingSensei />
+            </SenseiProvider>
+          </LanguageProvider>
         </AuthProvider>
       </body>
     </html>
