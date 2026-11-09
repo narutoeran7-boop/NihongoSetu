@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { GoogleGenAI } from "@google/genai";
 
 // Rate limiting in-memory store: IP -> array of timestamps
 const rateLimitMap = new Map<string, number[]>();
@@ -30,13 +31,26 @@ function isRateLimited(ip: string): boolean {
   return false;
 }
 
-const DEFAULT_SYSTEM_PROMPT = `You are Nihongo AI Sensei, a friendly, encouraging, and expert Japanese teacher on NihongoSetu (日本語節). Assume a beginner unless the learner shows otherwise.
-Reply in clear, structured text. Format:
-1) A short Japanese reply or answer
-2) Its romaji reading
-3) A clear grammatical and linguistic explanation in English (or the student's requested language)
-For vocabulary or grammar questions, provide 1-2 practical example sentences with romaji and translations. Explain differences clearly.
-Gently correct the learner's Japanese mistakes. Stay strictly focused on Japanese learning.`;
+const DEFAULT_SYSTEM_PROMPT = `You are Nihongo AI Sensei (日本語節の先生), a warm, encouraging, and expert Japanese teacher on the NihongoSetu platform.
+Your mission is to help learners master Japanese from JLPT N5 to N1.
+
+Key Teaching Guidelines:
+1. Multilingual Support:
+   - Detect the learner's language naturally.
+   - You fluently understand and explain in English, Tamil (தமிழ்), Tanglish (Tamil in Latin script), Hindi (हिन्दी), Telugu (తెలుగు), Malayalam (മലയാളം), Kannada (ಕನ್ನಡ), Bengali, Marathi, Gujarati, Punjabi, Urdu, Odia, Japanese, Simplified/Traditional Chinese, Korean, Spanish, French, German, and Arabic.
+   - If the student writes in Tamil or Tanglish (e.g., "Sensei, wa kum ga kum enna difference?", "epdi padikanum?"), respond naturally in their language while keeping Japanese terminology crystal-clear.
+
+2. Authentic Japanese Structure:
+   - Always provide Kanji/Kana + Romaji + Natural Translation.
+   - Explain grammatical nuances (e.g., SOV order, particles, transitive vs. intransitive verbs).
+   - Distinguish polite (丁寧語 / です・ます), casual (ため口), and respectful Keigo (尊敬語・謙譲語) when relevant.
+
+3. Encouraging & Constructive Correction:
+   - When a student makes a mistake, gently explain why, show the natural Japanese alternative, and encourage them.
+   - For vocabulary and grammar, provide 1–2 practical, everyday example sentences.
+
+4. Application & Button Context:
+   - If the student asks about a button, feature, lesson, or stroke practice from the provided application context, explain the exact feature from the NihongoSetu interface accurately.`;
 
 interface KnowledgeEntry {
   keywords: string[];
@@ -45,20 +59,30 @@ interface KnowledgeEntry {
 
 const KNOWLEDGE_FALLBACKS: KnowledgeEntry[] = [
   {
-    keywords: ["wa", "ga", "は", "が"],
-    reply: `は (wa) vs. が (ga) is one of the most fundamental grammatical distinctions in Japanese:
+    keywords: ["hello", "hi", "konnichiwa", "こんにちは", "வணக்கம்", "vanakkam", "namaste", "नमस्ते"],
+    reply: `こんにちは！ (Konnichiwa!) Welcome to NihongoSetu.
 
-1. は (wa) — Topic Marker:
-   • Marks what the sentence is about (the overarching context).
-   • Information after は is the new or important focus.
-   • Example: 私は学生です (Watashi wa gakusei desu) — "Speaking of me, I am a student."
+I am Sensei, your Japanese language tutor. Whether you are learning Hiragana/Katakana stroke orders, JLPT N5 Kanji, core vocabulary, or grammar particles, I am here to guide you step-by-step.
 
-2. が (ga) — Subject Marker (Identifier):
-   • Identifies who or what specifically performs the action.
-   • Information before が is the key answer to "who?" or "which?".
-   • Example: だれが来ましたか？田中さんが来ました (Tanaka-san ga kimashita) — "Who came? Tanaka-san (specifically) came."
+Feel free to ask questions in English, Tamil (தமிழ் / Tanglish), Hindi (हिन्दी), or Japanese! What would you like to explore today?`,
+  },
+  {
+    keywords: ["wa", "ga", "は", "が", "வித்தியாசம்"],
+    reply: `**は (wa) vs. が (ga)** is one of the most fundamental grammatical distinctions in Japanese:
 
-Quick Rule of Thumb: If someone asks "Who did it?", use が. If introducing a general topic, use は.`,
+1. **は (wa) — Topic Marker:**
+   • Marks what the sentence is *about* (the overarching topic).
+   • Information *after* は is the new or important focus.
+   • Example: 私は学生です (Watashi wa gakusei desu) = *Speaking of me, I am a student.*
+   • Tamil / Tanglish: "என்னைப் பற்றிச் சொன்னால், நான் ஒரு மாணவன்."
+
+2. **が (ga) — Subject Marker (Identifier):**
+   • Identifies *who* or *what* specifically performs the action.
+   • Information *before* が is the key answer to "who?" or "which?".
+   • Example: だれが来ましたか？ 田中さんが来ました (Tanaka-san ga kimashita) = *Who came? Tanaka-san (specifically) came.*
+   • Tamil / Tanglish: "யார் வந்தார்? தனகா தான் வந்தார் (குறிப்பிட்டுச் சொல்கிறது)."
+
+**Quick Rule of Thumb:** If someone asks "Who did it?", use **が**. If introducing a general topic, use **は**.`,
   },
   {
     keywords: ["te-form", "te form", "て形", "conjugat", "て-form"],
@@ -170,6 +194,7 @@ export async function POST(req: NextRequest) {
   // 2. Parse request payload
   let prompt = "";
   let instructions = DEFAULT_SYSTEM_PROMPT;
+  let contextInfo = "";
 
   try {
     const body = await req.json();
@@ -185,6 +210,10 @@ export async function POST(req: NextRequest) {
 
     if (body.instructions && typeof body.instructions === "string") {
       instructions = body.instructions;
+    }
+
+    if (body.context && typeof body.context === "object") {
+      contextInfo = `\n\n[Active Application & Learning Context]:\n${JSON.stringify(body.context, null, 2)}`;
     }
   } catch {
     return NextResponse.json(
@@ -208,49 +237,60 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // 4. If GEMINI_API_KEY is configured, call Gemini API
-  const geminiApiKey = process.env.GEMINI_API_KEY;
-  if (geminiApiKey) {
+  // 4. Google GenAI SDK Integration (Server-side via GEMINI_API_KEY environment variable)
+  const geminiApiKey = process.env.GEMINI_API_KEY?.trim();
+  const isKeyConfigured = Boolean(
+    geminiApiKey &&
+    !geminiApiKey.includes("your_") &&
+    geminiApiKey.length > 10
+  );
+
+  if (isKeyConfigured && geminiApiKey) {
+    const fullUserPrompt = contextInfo ? `${prompt}${contextInfo}` : prompt;
+    const ai = new GoogleGenAI({ apiKey: geminiApiKey });
+    const targetModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+
     try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 9000);
+      const response = await ai.models.generateContent({
+        model: targetModel,
+        contents: fullUserPrompt,
+        config: {
+          systemInstruction: instructions,
+          temperature: 0.6,
+          maxOutputTokens: 1000,
+        },
+      });
 
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiApiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          signal: controller.signal,
-          body: JSON.stringify({
-            contents: [
-              {
-                role: "user",
-                parts: [{ text: `${instructions}\n\nStudent question: ${prompt}` }],
-              },
-            ],
-            generationConfig: {
-              temperature: 0.6,
-              maxOutputTokens: 500,
-            },
-          }),
-        }
-      );
+      const candidateText = response.text?.trim();
+      if (candidateText) {
+        return NextResponse.json({
+          reply: candidateText,
+          source: "gemini",
+        });
+      }
+    } catch {
+      // Fallback attempt with gemini-1.5-flash in case primary model is temporarily unavailable
+      try {
+        const response = await ai.models.generateContent({
+          model: "gemini-1.5-flash",
+          contents: fullUserPrompt,
+          config: {
+            systemInstruction: instructions,
+            temperature: 0.6,
+            maxOutputTokens: 1000,
+          },
+        });
 
-      clearTimeout(timeoutId);
-
-      if (geminiRes.ok) {
-        const geminiData = await geminiRes.json();
-        const candidateText =
-          geminiData?.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (candidateText && typeof candidateText === "string") {
+        const candidateText = response.text?.trim();
+        if (candidateText) {
           return NextResponse.json({
-            reply: candidateText.trim(),
+            reply: candidateText,
             source: "gemini",
           });
         }
+      } catch {
+        // Fallback gracefully to local intelligent knowledge bank without exposing errors or keys
       }
-    } catch {
-      // Fallback gracefully on timeout or network error
     }
   }
 

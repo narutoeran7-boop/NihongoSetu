@@ -134,11 +134,23 @@ export default function AISenseiPage() {
     setIsTyping(true);
 
     try {
-      // Attempt backend API proxy route
+      // Attempt backend API proxy route with student context
+      const profile = getStudentProfile();
       const response = await fetch("/api/sensei", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt: query }),
+        body: JSON.stringify({
+          prompt: query,
+          context: {
+            currentRoute: "/portal/sensei",
+            pageTitle: "AI Sensei Chat",
+            userProfile: {
+              targetLevel: profile.targetLevel || "N5",
+              nativeLanguage: profile.nativeLanguage || "en",
+              streak: profile.streak || 1,
+            },
+          },
+        }),
       });
 
       if (response.ok) {
