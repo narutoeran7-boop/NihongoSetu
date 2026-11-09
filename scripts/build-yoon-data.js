@@ -47,6 +47,11 @@ const YOON_DEFINITIONS = [
   { id: "yoon-ju", romaji: "ju", hiraFirst: "じ", hiraSmall: "ゅ", kataFirst: "ジ", kataSmall: "ュ" },
   { id: "yoon-jo", romaji: "jo", hiraFirst: "じ", hiraSmall: "ょ", kataFirst: "ジ", kataSmall: "ョ" },
 
+  // Dja/Ja-Row (Voiced D-series)
+  { id: "yoon-dja", romaji: "ja", hiraFirst: "ぢ", hiraSmall: "ゃ", kataFirst: "ヂ", kataSmall: "ャ" },
+  { id: "yoon-dju", romaji: "ju", hiraFirst: "ぢ", hiraSmall: "ゅ", kataFirst: "ヂ", kataSmall: "ュ" },
+  { id: "yoon-djo", romaji: "jo", hiraFirst: "ぢ", hiraSmall: "ょ", kataFirst: "ヂ", kataSmall: "ョ" },
+
   // Bya-Row (Voiced)
   { id: "yoon-bya", romaji: "bya", hiraFirst: "び", hiraSmall: "ゃ", kataFirst: "ビ", kataSmall: "ャ" },
   { id: "yoon-byu", romaji: "byu", hiraFirst: "び", hiraSmall: "ゅ", kataFirst: "ビ", kataSmall: "ュ" },
@@ -62,7 +67,7 @@ const raw = JSON.parse(fs.readFileSync(path.join(__dirname, 'kanjivg-kana-raw.js
 
 let ts = `// ==============================================================================
 // NIHONGOSETU — AUTHENTIC YŌON (拗音) MASTER DATASET
-// Single verified source of truth for all 33 Hiragana & 33 Katakana combinations
+// Single verified source of truth for all 36 Hiragana & 36 Katakana combinations (12 series)
 // Authentic Hepburn Romaji, First Kana + Small Kana separation, exact stroke math
 // ==============================================================================
 
@@ -81,7 +86,7 @@ export interface YoonEntry {
 }
 
 // ------------------------------------------------------------------------------
-// 1. HIRAGANA YŌON (33 COMBINATIONS)
+// 1. HIRAGANA YŌON (36 COMBINATIONS)
 // ------------------------------------------------------------------------------
 export const HIRAGANA_YOON_DATA: YoonEntry[] = [
 `;
@@ -110,7 +115,7 @@ YOON_DEFINITIONS.forEach((def) => {
 ts += `];
 
 // ------------------------------------------------------------------------------
-// 2. KATAKANA YŌON (33 COMBINATIONS)
+// 2. KATAKANA YŌON (36 COMBINATIONS)
 // ------------------------------------------------------------------------------
 export const KATAKANA_YOON_DATA: YoonEntry[] = [
 `;
@@ -138,7 +143,7 @@ YOON_DEFINITIONS.forEach((def) => {
 
 ts += `];
 
-// Complete collection of all 66 Yōon entries
+// Complete collection of all 72 Yōon entries
 export const ALL_YOON_DATA: YoonEntry[] = [
   ...HIRAGANA_YOON_DATA,
   ...KATAKANA_YOON_DATA,
@@ -157,4 +162,5 @@ export function getYoonEntry(char: string): YoonEntry | undefined {
 
 const dest = path.join(__dirname, '..', 'src', 'data', 'yoonData.ts');
 fs.writeFileSync(dest, ts, 'utf-8');
-console.log(`Generated yoonData.ts at ${dest} with 66 verified combinations.`);
+console.log(`Generated yoonData.ts at ${dest} with 72 verified combinations.`);
+

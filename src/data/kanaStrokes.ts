@@ -19,11 +19,16 @@ export interface KanaStrokeData {
   code?: string;
   type: "hira" | "kata";
   strokeCount: number;
-  viewBox: string; // standard KanjiVG "0 0 109 109"
+  viewBox: string;
   strokes: KanaStroke[];
 }
 
 export const KANJIVG_VIEWBOX = "0 0 109 109";
+export const YOON_VIEWBOX = "0 0 218 109";
+
+export function getKanaViewBox(char: string): string {
+  return char.length === 2 ? YOON_VIEWBOX : KANJIVG_VIEWBOX;
+}
 
 export const KANA_STROKE_MAP: Record<string, KanaStroke[]> = {
   // ぁ (hira, 3 strokes)
@@ -3597,7 +3602,7 @@ export function getKanaStrokes(char: string, _scriptType?: "hira" | "kata"): Kan
     return KANA_STROKE_MAP[char];
   }
 
-  // 2. Yōon Combination (Two-character pairs: Base Kana + Small Kana)
+  // 2. Yōon Combination (Two-character pairs: Base Kana in Box 1 + Small Kana in Box 2)
   if (char.length === 2) {
     const baseChar = char[0];
     const smallChar = char[1];
@@ -3608,10 +3613,11 @@ export function getKanaStrokes(char: string, _scriptType?: "hira" | "kata"): Kan
     const result: KanaStroke[] = [];
     let idx = 1;
 
-    // Base character: 0.68 scale, positioned on left-center
-    const baseScale = 0.68;
-    const baseOffsetX = 4;
-    const baseOffsetY = 16;
+    // Box 1 (Main Kana): Left region 0..109, center (54.5, 54.5)
+    // Scale = 0.85, centered with 8.18px margin
+    const baseScale = 0.85;
+    const baseOffsetX = 8.18;
+    const baseOffsetY = 8.18;
     baseStrokes.forEach((s) => {
       const startX = +(s.startPoint.x * baseScale + baseOffsetX).toFixed(2);
       const startY = +(s.startPoint.y * baseScale + baseOffsetY).toFixed(2);
@@ -3628,10 +3634,11 @@ export function getKanaStrokes(char: string, _scriptType?: "hira" | "kata"): Kan
       });
     });
 
-    // Small kana component: 0.50 scale, positioned in lower-right quadrant
-    const smallScale = 0.50;
-    const smallOffsetX = 50;
-    const smallOffsetY = 38;
+    // Box 2 (Small Kana): Right region 109..218, center (163.5, 54.5)
+    // Authentic small kana scale = 0.62, centered in Box 2
+    const smallScale = 0.62;
+    const smallOffsetX = 129.71;
+    const smallOffsetY = 20.71;
     smallStrokes.forEach((s) => {
       const startX = +(s.startPoint.x * smallScale + smallOffsetX).toFixed(2);
       const startY = +(s.startPoint.y * smallScale + smallOffsetY).toFixed(2);

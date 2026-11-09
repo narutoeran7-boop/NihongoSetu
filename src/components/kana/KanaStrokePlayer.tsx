@@ -1,7 +1,13 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { KanaStroke, getKanaStrokes, KANJIVG_VIEWBOX } from "@/data/kanaStrokes";
+import {
+  KanaStroke,
+  getKanaStrokes,
+  KANJIVG_VIEWBOX,
+  YOON_VIEWBOX,
+  getKanaViewBox,
+} from "@/data/kanaStrokes";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
 import {
   Play,
@@ -43,6 +49,9 @@ export default function KanaStrokePlayer({
 
   // Yōon Detection & Component Calculation
   const isYoon = char.length === 2;
+  const currentViewBox = getKanaViewBox(char);
+  const viewBoxWidth = isYoon ? 218 : 109;
+  const viewBoxHeight = 109;
   const firstChar = isYoon ? char[0] : "";
   const smallChar = isYoon ? char[1] : "";
   const firstStrokesCount = isYoon
@@ -137,12 +146,13 @@ export default function KanaStrokePlayer({
     const start = points[0];
     const end = points[points.length - 1];
 
-    // 1. Proximity check on start point (distance in 109x109 KanjiVG space)
+    // 1. Proximity check on start point (distance in KanjiVG vector coordinate space)
     const distToStart = Math.hypot(start.x - expected.startPoint.x, start.y - expected.startPoint.y);
-    if (distToStart > 26) {
+    if (distToStart > 28) {
+      const compLabel = isYoon && expected.componentChar ? ` (${expected.componentChar})` : "";
       setPracticeFeedback({
         type: "error",
-        message: t("script_feedback_start_near", practiceStep + 1),
+        message: `${t("script_feedback_start_near", practiceStep + 1)}${compLabel}`,
       });
       clearCanvas();
       return;
@@ -185,9 +195,11 @@ export default function KanaStrokePlayer({
       });
     } else {
       setPracticeStep(nextStep);
+      const nextStroke = strokes[nextStep];
+      const compLabel = isYoon && nextStroke?.componentChar ? ` (${nextStroke.componentChar})` : "";
       setPracticeFeedback({
         type: "success",
-        message: t("script_feedback_correct", practiceStep + 1),
+        message: `${t("script_feedback_correct", practiceStep + 1)}${compLabel}`,
       });
     }
   };
@@ -215,12 +227,17 @@ export default function KanaStrokePlayer({
     setIsDrawing(true);
     const { x, y } = getCanvasCoords(e);
 
-    // Save normalized 0..109 KanjiVG coordinate
-    drawnPointsRef.current = [{ x: (x / canvas.width) * 109, y: (y / canvas.height) * 109 }];
+    // Save normalized KanjiVG vector coordinate (scaled to 109x109 or 218x109)
+    drawnPointsRef.current = [
+      {
+        x: (x / canvas.width) * viewBoxWidth,
+        y: (y / canvas.height) * viewBoxHeight,
+      },
+    ];
 
     ctx.beginPath();
     ctx.moveTo(x, y);
-    ctx.lineWidth = 12;
+    ctx.lineWidth = isYoon ? 10 : 12;
     ctx.lineCap = "round";
     ctx.lineJoin = "round";
     ctx.strokeStyle = brushColor;
@@ -234,7 +251,10 @@ export default function KanaStrokePlayer({
     if (!ctx) return;
 
     const { x, y } = getCanvasCoords(e);
-    drawnPointsRef.current.push({ x: (x / canvas.width) * 109, y: (y / canvas.height) * 109 });
+    drawnPointsRef.current.push({
+      x: (x / canvas.width) * viewBoxWidth,
+      y: (y / canvas.height) * viewBoxHeight,
+    });
 
     ctx.lineTo(x, y);
     ctx.stroke();
@@ -397,41 +417,66 @@ export default function KanaStrokePlayer({
       </div>
 
       {/* Main Interactive Stage (SVG Guide + Animator + Canvas) */}
-      <div className="relative w-full aspect-square max-w-[320px] mx-auto rounded-3xl bg-[#0B1323] border-2 border-[#E8E0D5]/25 overflow-hidden shadow-inner flex items-center justify-center">
-        {/* Guide Crosshairs */}
-        <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
-          <div className="w-full h-px border-b border-dashed border-[#E8E0D5]/15" />
-          <div className="h-full w-px border-r border-dashed border-[#E8E0D5]/15 absolute" />
-        </div>
+      <div
+        className={`relative w-full mx-auto rounded-3xl bg-[#0B1323] border-2 border-[#E8E0D5]/25 overflow-hidden shadow-inner flex items-center justify-center transition-all ${
+          isYoon ? "aspect-[2/1] max-w-[560px]" : "aspect-square max-w-[320px]"
+        }`}
+      >
+        {/* Guide Crosshairs & Boundary Separation */}
+        {isYoon ? (
+          <div className="absolute inset-0 pointer-events-none">
+            {/* Center boundary dividing Box 1 (Main Kana) and Box 2 (Small Kana) */}
+            <div className="absolute left-1/2 top-0 bottom-0 w-px border-r-2 border-[#E8E0D5]/30 shadow" />
 
-        {/* Yōon Component Separation Badge */}
-        {isYoon && (
-          <div className="absolute top-2.5 left-3 z-20 px-2 py-0.5 rounded-full bg-[#101C35]/90 border border-[#E8E0D5]/20 text-[10px] text-[#E8E0D5]/80 font-japanese flex items-center space-x-1.5 shadow pointer-events-none">
-            <span
-              className={
-                mode === "practice" && strokes[practiceStep]?.component === "small"
-                  ? "opacity-40"
-                  : "text-emerald-400 font-bold"
-              }
-            >
-              {firstChar} ({firstStrokesCount})
-            </span>
-            <span className="text-[#E8E0D5]/40">+</span>
-            <span
-              className={
-                mode === "practice" && strokes[practiceStep]?.component === "first"
-                  ? "opacity-40"
-                  : "text-amber-400 font-bold"
-              }
-            >
-              {smallChar} ({smallStrokesCount})
-            </span>
+            {/* Horizontal midline spanning both boxes */}
+            <div className="absolute top-1/2 left-0 right-0 h-px border-b border-dashed border-[#E8E0D5]/20" />
+
+            {/* Left box vertical midline (at 25% of total width) */}
+            <div className="absolute left-1/4 top-0 bottom-0 w-px border-r border-dashed border-[#E8E0D5]/20" />
+
+            {/* Right box vertical midline (at 75% of total width) */}
+            <div className="absolute left-3/4 top-0 bottom-0 w-px border-r border-dashed border-[#E8E0D5]/20" />
+
+            {/* Box 1 (Main Kana) Header Badge */}
+            <div className="absolute top-2.5 left-3 z-20 flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-[#101C35]/95 border border-[#E8E0D5]/25 text-[11px] font-japanese shadow-md pointer-events-none">
+              <span className="text-[10px] text-[#E8E0D5]/60 font-sans tracking-tight">Main:</span>
+              <span
+                className={
+                  mode === "practice" && strokes[practiceStep]?.component === "small"
+                    ? "opacity-40 text-emerald-400 font-bold"
+                    : "text-emerald-400 font-bold"
+                }
+              >
+                {firstChar}
+              </span>
+              <span className="text-[10px] text-[#E8E0D5]/50 font-mono">({firstStrokesCount})</span>
+            </div>
+
+            {/* Box 2 (Small Kana) Header Badge */}
+            <div className="absolute top-2.5 right-3 z-20 flex items-center space-x-1.5 px-2.5 py-1 rounded-xl bg-[#101C35]/95 border border-[#E8E0D5]/25 text-[11px] font-japanese shadow-md pointer-events-none">
+              <span className="text-[10px] text-[#E8E0D5]/60 font-sans tracking-tight">Small:</span>
+              <span
+                className={
+                  mode === "practice" && strokes[practiceStep]?.component === "first"
+                    ? "opacity-40 text-amber-400 font-bold"
+                    : "text-amber-400 font-bold"
+                }
+              >
+                {smallChar}
+              </span>
+              <span className="text-[10px] text-[#E8E0D5]/50 font-mono">({smallStrokesCount})</span>
+            </div>
+          </div>
+        ) : (
+          <div className="absolute inset-0 pointer-events-none flex items-center justify-center">
+            <div className="w-full h-px border-b border-dashed border-[#E8E0D5]/15" />
+            <div className="h-full w-px border-r border-dashed border-[#E8E0D5]/15 absolute" />
           </div>
         )}
 
         {/* Authentic SVG Stroke Animator & Guide Engine */}
         <svg
-          viewBox={KANJIVG_VIEWBOX}
+          viewBox={currentViewBox}
           className="absolute inset-0 w-full h-full pointer-events-none"
         >
           {/* 1. Static Reference Guide Overlay (Identical matching vector geometry) */}
@@ -562,8 +607,8 @@ export default function KanaStrokePlayer({
         {/* User Practice Drawing Canvas (100% 1-to-1 coordinate aligned with SVG) */}
         <canvas
           ref={canvasRef}
-          width={320}
-          height={320}
+          width={isYoon ? 560 : 320}
+          height={isYoon ? 280 : 320}
           onMouseDown={startDrawing}
           onMouseMove={draw}
           onMouseUp={stopDrawing}
@@ -575,7 +620,7 @@ export default function KanaStrokePlayer({
         />
 
         {/* Bottom Right Step Indicator Badge */}
-        <div className="absolute bottom-2.5 right-3 z-20 px-2.5 py-0.5 rounded-full bg-[#101C35]/90 border border-[#E8E0D5]/20 text-[10px] text-[#E8E0D5]/90 font-mono flex items-center space-x-1.5 shadow">
+        <div className="absolute bottom-2.5 right-3 z-20 px-2.5 py-0.5 rounded-full bg-[#101C35]/90 border border-[#E8E0D5]/20 text-[10px] text-[#E8E0D5]/90 font-mono flex items-center space-x-1.5 shadow pointer-events-none">
           {mode === "practice" ? (
             <>
               {practiceCompleted && <CheckCircle2 className="w-3 h-3 text-emerald-400" />}
@@ -584,7 +629,7 @@ export default function KanaStrokePlayer({
               </span>
               {isYoon && practiceStep < strokes.length && (
                 <span className="text-[10px] text-[#C83C50] font-japanese border-l border-[#E8E0D5]/20 pl-1.5 font-bold">
-                  {strokes[practiceStep]?.component === "small" ? smallChar : firstChar}
+                  {strokes[practiceStep]?.componentChar || (strokes[practiceStep]?.component === "small" ? smallChar : firstChar)}
                 </span>
               )}
             </>
@@ -594,6 +639,11 @@ export default function KanaStrokePlayer({
               <span>
                 {t("script_step_indicator", currentStep, actualStrokeCount)}
               </span>
+              {isYoon && (
+                <span className="text-[10px] text-[#C83C50] font-japanese border-l border-[#E8E0D5]/20 pl-1.5 font-bold">
+                  {currentStep <= firstStrokesCount ? firstChar : smallChar}
+                </span>
+              )}
             </>
           )}
         </div>

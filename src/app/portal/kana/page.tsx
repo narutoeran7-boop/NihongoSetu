@@ -258,7 +258,7 @@ export default function JapaneseScriptPage() {
             </div>
           )}
 
-          {/* 3. YOON / CONTRACTED SOUNDS (33 characters) */}
+          {/* 3. YOON / CONTRACTED SOUNDS (36 combinations) */}
           {category === "yoon" && (
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
               {YOON_KANA.map((item) => {

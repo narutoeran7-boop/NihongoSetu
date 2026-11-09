@@ -138,8 +138,8 @@ export const DAKUON_KANA: KanaItem[] = [
 ];
 
 // ------------------------------------------------------------------------------
-// 3. YOON / CONTRACTED SOUNDS (拗音 — 33 COMBINATIONS)
-// Standard combinations: Kya..Ryo (21) + Gya, Ja, Bya, Pya (12)
+// 3. YOON / CONTRACTED SOUNDS (拗音 — 36 COMBINATIONS)
+// Standard combinations: Kya..Ryo (21) + Gya, Ja, Dja, Bya, Pya (15) = 36
 // ------------------------------------------------------------------------------
 export const YOON_KANA: KanaItem[] = [
   // Kya-Row
@@ -186,6 +186,11 @@ export const YOON_KANA: KanaItem[] = [
   { id: "yoon-ja", hira: "じゃ", kata: "ジャ", romaji: "ja", category: "yoon", strokes: { hira: 6, kata: 7 } },
   { id: "yoon-ju", hira: "じゅ", kata: "ジュ", romaji: "ju", category: "yoon", strokes: { hira: 5, kata: 7 } },
   { id: "yoon-jo", hira: "じょ", kata: "ジョ", romaji: "jo", category: "yoon", strokes: { hira: 5, kata: 8 } },
+
+  // Dja/Ja-Row (Voiced D-series)
+  { id: "yoon-dja", hira: "ぢゃ", kata: "ヂャ", romaji: "ja", category: "yoon", strokes: { hira: 7, kata: 7 } },
+  { id: "yoon-dju", hira: "ぢゅ", kata: "ヂュ", romaji: "ju", category: "yoon", strokes: { hira: 6, kata: 7 } },
+  { id: "yoon-djo", hira: "ぢょ", kata: "ヂョ", romaji: "jo", category: "yoon", strokes: { hira: 6, kata: 8 } },
 
   // Bya-Row (Voiced)
   { id: "yoon-bya", hira: "びゃ", kata: "ビャ", romaji: "bya", category: "yoon", strokes: { hira: 6, kata: 6 } },

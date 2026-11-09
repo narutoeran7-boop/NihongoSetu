@@ -1,6 +1,6 @@
 // ==============================================================================
 // NIHONGOSETU — AUTHENTIC YŌON (拗音) MASTER DATASET
-// Single verified source of truth for all 33 Hiragana & 33 Katakana combinations
+// Single verified source of truth for all 36 Hiragana & 36 Katakana combinations (12 series)
 // Authentic Hepburn Romaji, First Kana + Small Kana separation, exact stroke math
 // ==============================================================================
 
@@ -19,7 +19,7 @@ export interface YoonEntry {
 }
 
 // ------------------------------------------------------------------------------
-// 1. HIRAGANA YŌON (33 COMBINATIONS)
+// 1. HIRAGANA YŌON (36 COMBINATIONS)
 // ------------------------------------------------------------------------------
 export const HIRAGANA_YOON_DATA: YoonEntry[] = [
   {
@@ -374,6 +374,45 @@ export const HIRAGANA_YOON_DATA: YoonEntry[] = [
     audioText: "じょ",
   },
   {
+    id: "yoon-dja",
+    char: "ぢゃ",
+    scriptType: "hira",
+    firstKana: "ぢ",
+    smallKana: "ゃ",
+    firstStrokes: 4,
+    smallStrokes: 3,
+    totalStrokes: 7,
+    romaji: "ja",
+    category: "yoon",
+    audioText: "ぢゃ",
+  },
+  {
+    id: "yoon-dju",
+    char: "ぢゅ",
+    scriptType: "hira",
+    firstKana: "ぢ",
+    smallKana: "ゅ",
+    firstStrokes: 4,
+    smallStrokes: 2,
+    totalStrokes: 6,
+    romaji: "ju",
+    category: "yoon",
+    audioText: "ぢゅ",
+  },
+  {
+    id: "yoon-djo",
+    char: "ぢょ",
+    scriptType: "hira",
+    firstKana: "ぢ",
+    smallKana: "ょ",
+    firstStrokes: 4,
+    smallStrokes: 2,
+    totalStrokes: 6,
+    romaji: "jo",
+    category: "yoon",
+    audioText: "ぢょ",
+  },
+  {
     id: "yoon-bya",
     char: "びゃ",
     scriptType: "hira",
@@ -454,7 +493,7 @@ export const HIRAGANA_YOON_DATA: YoonEntry[] = [
 ];
 
 // ------------------------------------------------------------------------------
-// 2. KATAKANA YŌON (33 COMBINATIONS)
+// 2. KATAKANA YŌON (36 COMBINATIONS)
 // ------------------------------------------------------------------------------
 export const KATAKANA_YOON_DATA: YoonEntry[] = [
   {
@@ -809,6 +848,45 @@ export const KATAKANA_YOON_DATA: YoonEntry[] = [
     audioText: "ジョ",
   },
   {
+    id: "yoon-kata-dja",
+    char: "ヂャ",
+    scriptType: "kata",
+    firstKana: "ヂ",
+    smallKana: "ャ",
+    firstStrokes: 5,
+    smallStrokes: 2,
+    totalStrokes: 7,
+    romaji: "ja",
+    category: "yoon",
+    audioText: "ヂャ",
+  },
+  {
+    id: "yoon-kata-dju",
+    char: "ヂュ",
+    scriptType: "kata",
+    firstKana: "ヂ",
+    smallKana: "ュ",
+    firstStrokes: 5,
+    smallStrokes: 2,
+    totalStrokes: 7,
+    romaji: "ju",
+    category: "yoon",
+    audioText: "ヂュ",
+  },
+  {
+    id: "yoon-kata-djo",
+    char: "ヂョ",
+    scriptType: "kata",
+    firstKana: "ヂ",
+    smallKana: "ョ",
+    firstStrokes: 5,
+    smallStrokes: 3,
+    totalStrokes: 8,
+    romaji: "jo",
+    category: "yoon",
+    audioText: "ヂョ",
+  },
+  {
     id: "yoon-kata-bya",
     char: "ビャ",
     scriptType: "kata",
@@ -888,7 +966,7 @@ export const KATAKANA_YOON_DATA: YoonEntry[] = [
   },
 ];
 
-// Complete collection of all 66 Yōon entries
+// Complete collection of all 72 Yōon entries
 export const ALL_YOON_DATA: YoonEntry[] = [
   ...HIRAGANA_YOON_DATA,
   ...KATAKANA_YOON_DATA,
