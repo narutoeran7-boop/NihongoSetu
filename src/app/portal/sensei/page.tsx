@@ -21,10 +21,14 @@ import {
   Radio,
   Languages,
   Headphones,
-  CheckCircle2,
   AlertCircle,
   MessageSquare,
-  Sparkle,
+  Activity,
+  Zap,
+  Volume1,
+  Sliders,
+  ChevronRight,
+  Info,
 } from "lucide-react";
 import { getStudentProfile, DEFAULT_PROFILE, StudentProfile } from "@/lib/storage/studentState";
 
@@ -35,6 +39,8 @@ interface ChatMessage {
   timestamp: string;
   source?: "gemini" | "fallback";
 }
+
+type VoiceState = "idle" | "listening" | "thinking" | "speaking" | "interrupted" | "error";
 
 const SPEECH_LANGUAGES = [
   { code: "ja-JP", label: "Japanese (日本語)", flag: "🇯🇵" },
@@ -142,12 +148,12 @@ const INITIAL_MESSAGES: ChatMessage[] = [
     sender: "sensei",
     text: `こんにちは！ (Konnichiwa!) 🌸
 
-I am **Nihongo AI Sensei**, your dedicated Japanese tutor powered by Google Gemini. 
+I am **Nihongo AI Sensei**, your dedicated Japanese tutor powered by Google Gemini.
 
 How can I assist your Japanese learning journey today?
-• 🗣️ **Voice Interaction**: Click the microphone to speak in Japanese, Tamil, or English!
-• 🎙️ **Hands-Free Mode**: Toggle **Conversation Mode** above to talk continuously with me.
-• 🎌 **JLPT Guidance**: Ask about N5–N1 grammar, Kanji mnemonics, or pronunciation!`,
+• 🎙️ **Live Voice Studio**: Click **"Live Voice Studio"** above for continuous, real-time voice conversation!
+• 🗣️ **Microphone Input**: Click the mic icon below to speak your questions naturally.
+• 🎌 **JLPT Guidance**: Ask about N5–N1 grammar, Kanji readings, particles, or pronunciation!`,
     timestamp: "10:00 AM",
     source: "gemini",
   },
@@ -155,19 +161,19 @@ How can I assist your Japanese learning journey today?
 
 function cleanMarkdownForSpeech(md: string): string {
   return md
-    .replace(/```[\s\S]*?```/g, "") // remove code blocks
-    .replace(/`([^`]+)`/g, "$1") // inline code
-    .replace(/#{1,6}\s+/g, "") // headings
-    .replace(/\*\*([^*]+)\*\*/g, "$1") // bold
-    .replace(/\*([^*]+)\*/g, "$1") // italic
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/#{1,6}\s+/g, "")
+    .replace(/\*\*([^*]+)\*\*/g, "$1")
+    .replace(/\*([^*]+)\*/g, "$1")
     .replace(/__([^_]+)__/g, "$1")
     .replace(/_([^_]+)_/g, "$1")
-    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // links
-    .replace(/^[*-]\s+/gm, "") // bullet points
-    .replace(/^\d+\.\s+/gm, "") // ordered lists
-    .replace(/^>\s+/gm, "") // blockquotes
-    .replace(/---/g, "") // horizontal rules
-    .replace(/\|/g, " ") // table pipes
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+    .replace(/^[*-]\s+/gm, "")
+    .replace(/^\d+\.\s+/gm, "")
+    .replace(/^>\s+/gm, "")
+    .replace(/---/g, "")
+    .replace(/\|/g, " ")
     .replace(/\n{2,}/g, "\n")
     .trim();
 }
@@ -181,101 +187,212 @@ export default function AISenseiPage() {
   const [studentProfile, setStudentProfile] = useState<StudentProfile>(DEFAULT_PROFILE);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
-  // Voice Recognition States
-  const [isListening, setIsListening] = useState(false);
+  // Active App Studio Mode: 'text' vs 'voice'
+  const [studioMode, setStudioMode] = useState<"text" | "voice">("text");
+
+  // Real-Time Voice Studio States
+  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
+  const voiceStateRef = useRef<VoiceState>("idle");
+  voiceStateRef.current = voiceState;
+
   const [speechLang, setSpeechLang] = useState("ja-JP");
+  const [speechRate, setSpeechRate] = useState(0.92);
+  const [isMuted, setIsMuted] = useState(false);
+  const isMutedRef = useRef(false);
+  isMutedRef.current = isMuted;
+
   const [recognitionError, setRecognitionError] = useState<string | null>(null);
+  const [liveUserTranscript, setLiveUserTranscript] = useState("");
+  const [liveSenseiTranscript, setLiveSenseiTranscript] = useState("");
+
+  // Refs for Web Speech & Web Audio APIs
   const recognitionRef = useRef<any>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const animationFrameRef = useRef<number | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  // Voice Output (Speech Synthesis) States
-  const [speakingId, setSpeakingId] = useState<string | null>(null);
+  // Text-To-Speech Playback State for Text Mode
+  const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
-  const utteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
-
-  // Conversation Mode (Hands-Free Loop)
-  const [conversationMode, setConversationMode] = useState(false);
-  const conversationModeRef = useRef(false);
-  conversationModeRef.current = conversationMode;
 
   useEffect(() => {
-    // Hydration-safe profile loading
+    // Hydration-safe initial profile sync
     setStudentProfile(getStudentProfile());
   }, []);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, isTyping]);
+  }, [messages, isTyping, liveSenseiTranscript]);
 
-  // Clean up speech recognition & synthesis on unmount
+  // Clean up all audio/speech resources on unmount
   useEffect(() => {
     return () => {
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.abort();
-        } catch {
-          // ignore
-        }
-      }
-      if (typeof window !== "undefined" && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-      }
+      stopAllAudio();
     };
   }, []);
 
-  // --------------------------------------------------------------------------
-  // Voice Output: Enhanced Speech Synthesis
-  // --------------------------------------------------------------------------
-  const stopSpeaking = useCallback(() => {
+  const stopAllAudio = useCallback(() => {
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.abort();
+      } catch {
+        // ignore
+      }
+      recognitionRef.current = null;
+    }
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
-    setSpeakingId(null);
+    if (animationFrameRef.current) {
+      cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+    }
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((track) => track.stop());
+      micStreamRef.current = null;
+    }
+    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+      audioContextRef.current.close().catch(() => {});
+      audioContextRef.current = null;
+    }
+    setSpeakingMsgId(null);
     setIsPaused(false);
   }, []);
 
-  const pauseSpeaking = useCallback(() => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) {
-        window.speechSynthesis.pause();
-        setIsPaused(true);
+  // --------------------------------------------------------------------------
+  // Web Audio Visualizer & Real-Time Audio Energy Processing
+  // --------------------------------------------------------------------------
+  const setupAudioAnalyser = async (): Promise<boolean> => {
+    try {
+      if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+        return false;
       }
-    }
-  }, []);
 
-  const resumeSpeaking = useCallback(() => {
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
-        setIsPaused(false);
+      if (micStreamRef.current && audioContextRef.current) {
+        return true;
       }
-    }
-  }, []);
 
-  const speakText = useCallback(
-    (msgId: string, text: string) => {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
+
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      const audioCtx = new AudioCtx();
+      audioContextRef.current = audioCtx;
+
+      const source = audioCtx.createMediaStreamSource(stream);
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 64;
+      analyser.smoothingTimeConstant = 0.8;
+      source.connect(analyser);
+      analyserRef.current = analyser;
+
+      startCanvasVisualization();
+      return true;
+    } catch (err: any) {
+      setRecognitionError(
+        err.name === "NotAllowedError" || err.name === "PermissionDeniedError"
+          ? "Microphone access was denied. Please allow microphone permissions in your browser bar."
+          : "Could not access microphone."
+      );
+      return false;
+    }
+  };
+
+  const startCanvasVisualization = () => {
+    if (!canvasRef.current || !analyserRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const analyser = analyserRef.current;
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    const render = () => {
+      animationFrameRef.current = requestAnimationFrame(render);
+      analyser.getByteFrequencyData(dataArray);
+
+      // Calculate audio energy for Voice Activity Detection
+      let sum = 0;
+      for (let i = 0; i < bufferLength; i++) {
+        sum += dataArray[i];
+      }
+      const averageVolume = sum / bufferLength;
+
+      // Natural Interruption (Barge-in):
+      // If user speaks loud enough while Sensei is currently speaking, immediately interrupt Sensei!
+      if (voiceStateRef.current === "speaking" && averageVolume > 38 && !isMutedRef.current) {
+        triggerInterruption();
+      }
+
+      // Draw dynamic reactive waveform
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const barWidth = (canvas.width / bufferLength) * 1.8;
+      let x = 0;
+
+      for (let i = 0; i < bufferLength; i++) {
+        const v = dataArray[i] / 255;
+        const barHeight = Math.max(4, v * canvas.height * 0.9);
+
+        // Color based on active state
+        let barColor = "#C83C50";
+        if (voiceStateRef.current === "listening") barColor = "#38BDF8"; // Cyan/sky blue
+        if (voiceStateRef.current === "speaking") barColor = "#E11D48"; // Rose crimson
+        if (voiceStateRef.current === "thinking") barColor = "#F59E0B"; // Amber
+
+        ctx.fillStyle = barColor;
+        ctx.beginPath();
+        ctx.roundRect(x, (canvas.height - barHeight) / 2, barWidth - 2, barHeight, 4);
+        ctx.fill();
+
+        x += barWidth;
+      }
+    };
+
+    render();
+  };
+
+  // --------------------------------------------------------------------------
+  // Natural Interruption Handler (Barge-In)
+  // --------------------------------------------------------------------------
+  const triggerInterruption = useCallback(() => {
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+    }
+    setVoiceState("interrupted");
+    setLiveSenseiTranscript("Sensei: (Interrupted) Listening to you...");
+
+    // Smoothly resume listening to the student
+    setTimeout(() => {
+      if (studioMode === "voice") {
+        setVoiceState("listening");
+        startSpeechRecognition();
+      }
+    }, 250);
+  }, [studioMode]);
+
+  // --------------------------------------------------------------------------
+  // Voice Output (Speech Synthesis) Engine
+  // --------------------------------------------------------------------------
+  const speakSenseiResponse = useCallback(
+    (text: string, onFinish?: () => void) => {
       if (typeof window === "undefined" || !("speechSynthesis" in window)) {
-        setRecognitionError("Speech synthesis is not supported on this device/browser.");
-        return;
-      }
-
-      // If already speaking this message, toggle pause/resume
-      if (speakingId === msgId) {
-        if (isPaused) {
-          resumeSpeaking();
-        } else {
-          pauseSpeaking();
-        }
+        if (onFinish) onFinish();
         return;
       }
 
       window.speechSynthesis.cancel();
       const cleaned = cleanMarkdownForSpeech(text);
-      if (!cleaned) return;
+      if (!cleaned) {
+        if (onFinish) onFinish();
+        return;
+      }
 
       const utterance = new SpeechSynthesisUtterance(cleaned);
-      utteranceRef.current = utterance;
+      utterance.rate = speechRate;
 
-      // Detect predominant script to pick optimal voice
+      // Detect predominant language script
       const hasJapanese = /[\u3040-\u30ff\u3400-\u4dbf\u4e00-\u9fff]/.test(cleaned);
       const hasTamil = /[\u0b80-\u0bff]/.test(cleaned);
 
@@ -284,52 +401,55 @@ export default function AISenseiPage() {
         utterance.lang = "ja-JP";
         const jaVoice = voices.find((v) => v.lang.startsWith("ja"));
         if (jaVoice) utterance.voice = jaVoice;
-        utterance.rate = 0.9;
       } else if (hasTamil) {
         utterance.lang = "ta-IN";
         const taVoice = voices.find((v) => v.lang.startsWith("ta"));
         if (taVoice) utterance.voice = taVoice;
-        utterance.rate = 0.92;
       } else {
         utterance.lang = "en-US";
         const enVoice = voices.find((v) => v.lang.startsWith("en"));
         if (enVoice) utterance.voice = enVoice;
-        utterance.rate = 0.95;
       }
 
       utterance.onstart = () => {
-        setSpeakingId(msgId);
-        setIsPaused(false);
+        setVoiceState("speaking");
+        setLiveSenseiTranscript(text);
       };
 
       utterance.onend = () => {
-        setSpeakingId(null);
-        setIsPaused(false);
-
-        // In continuous conversation mode, prompt user to speak after Sensei finishes
-        if (conversationModeRef.current) {
-          setTimeout(() => {
-            if (conversationModeRef.current && !recognitionRef.current) {
-              startListening();
-            }
-          }, 600);
+        if (voiceStateRef.current === "speaking") {
+          setVoiceState("listening");
         }
+        if (onFinish) onFinish();
       };
 
       utterance.onerror = () => {
-        setSpeakingId(null);
-        setIsPaused(false);
+        if (voiceStateRef.current === "speaking") {
+          setVoiceState("listening");
+        }
+        if (onFinish) onFinish();
       };
 
       window.speechSynthesis.speak(utterance);
     },
-    [speakingId, isPaused, resumeSpeaking, pauseSpeaking]
+    [speechRate]
   );
 
   // --------------------------------------------------------------------------
-  // Voice Input: Web Speech Recognition
+  // Voice Input (Speech Recognition) Engine
   // --------------------------------------------------------------------------
-  const stopListening = useCallback(() => {
+  const startSpeechRecognition = useCallback(() => {
+    const SpeechRec =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+
+    if (!SpeechRec) {
+      setRecognitionError(
+        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari."
+      );
+      setVoiceState("error");
+      return;
+    }
+
     if (recognitionRef.current) {
       try {
         recognitionRef.current.stop();
@@ -337,27 +457,6 @@ export default function AISenseiPage() {
         // ignore
       }
       recognitionRef.current = null;
-    }
-    setIsListening(false);
-  }, []);
-
-  const startListening = useCallback(() => {
-    setRecognitionError(null);
-
-    const SpeechRec =
-      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-
-    if (!SpeechRec) {
-      setRecognitionError(
-        "Speech recognition is not supported in this browser. Please use Chrome, Edge, or Safari for voice interaction."
-      );
-      return;
-    }
-
-    // Stop ongoing speech when user starts talking
-    if (typeof window !== "undefined" && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      setSpeakingId(null);
     }
 
     try {
@@ -368,7 +467,7 @@ export default function AISenseiPage() {
       recognition.maxAlternatives = 1;
 
       recognition.onstart = () => {
-        setIsListening(true);
+        setVoiceState("listening");
       };
 
       recognition.onresult = (event: any) => {
@@ -377,63 +476,186 @@ export default function AISenseiPage() {
           transcript += event.results[i][0].transcript;
         }
 
-        setInput(transcript);
+        setLiveUserTranscript(transcript);
 
-        // If in auto conversation mode and final result is arrived, auto-send
-        if (conversationModeRef.current && event.results[0].isFinal && transcript.trim()) {
-          stopListening();
-          handleSend(transcript.trim());
+        // Natural interruption: if Sensei was speaking, talking immediately interrupts
+        if (voiceStateRef.current === "speaking") {
+          triggerInterruption();
+        }
+
+        // When speech turn is finalized, process conversational turn
+        if (event.results[0]?.isFinal && transcript.trim()) {
+          recognition.stop();
+          processVoiceTurn(transcript.trim());
         }
       };
 
       recognition.onerror = (event: any) => {
-        if (event.error === "not-allowed" || event.error === "service-not-allowed") {
-          setRecognitionError("Microphone permission was denied. Please allow microphone access in your browser settings.");
-        } else if (event.error === "no-speech") {
-          // Silent timeout
-        } else {
-          setRecognitionError(`Voice recognition error: ${event.error}`);
+        if (event.error === "no-speech") {
+          // Restart listening seamlessly if still in live voice mode
+          if (studioMode === "voice" && voiceStateRef.current === "listening" && !isMutedRef.current) {
+            setTimeout(() => {
+              if (voiceStateRef.current === "listening") startSpeechRecognition();
+            }, 300);
+          }
+        } else if (event.error === "not-allowed") {
+          setRecognitionError("Microphone permission was denied.");
+          setVoiceState("error");
         }
-        setIsListening(false);
-        recognitionRef.current = null;
       };
 
       recognition.onend = () => {
-        setIsListening(false);
         recognitionRef.current = null;
+        if (voiceStateRef.current === "listening" && studioMode === "voice" && !isMutedRef.current) {
+          setTimeout(() => {
+            if (voiceStateRef.current === "listening") startSpeechRecognition();
+          }, 300);
+        }
       };
 
       recognitionRef.current = recognition;
       recognition.start();
-    } catch (err: any) {
-      setRecognitionError(`Failed to initialize microphone: ${err?.message || "Unknown error"}`);
-      setIsListening(false);
-      recognitionRef.current = null;
+    } catch {
+      // fallback
     }
-  }, [speechLang]);
+  }, [speechLang, studioMode, triggerInterruption]);
 
-  const toggleListening = () => {
-    if (isListening) {
-      stopListening();
+  // --------------------------------------------------------------------------
+  // Conversational Spoken Turn Processor
+  // --------------------------------------------------------------------------
+  const processVoiceTurn = async (spokenText: string) => {
+    if (!spokenText.trim()) return;
+
+    setVoiceState("thinking");
+    setLiveUserTranscript(spokenText);
+
+    counterRef.current += 1;
+    const userMsg: ChatMessage = {
+      id: `u-${counterRef.current}`,
+      sender: "user",
+      text: spokenText,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+
+    try {
+      const profile = getStudentProfile();
+      const response = await fetch("/api/sensei", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: spokenText,
+          mode: "voice_conversation",
+          context: {
+            currentRoute: "/portal/sensei",
+            pageTitle: "AI Sensei Live Voice Studio",
+            userProfile: {
+              targetLevel: profile.targetLevel || "N5",
+              nativeLanguage: profile.nativeLanguage || "en",
+              streak: profile.streak || 1,
+            },
+          },
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        if (data.reply) {
+          counterRef.current += 1;
+          const senseiMsgId = `s-${counterRef.current}`;
+          const senseiMsg: ChatMessage = {
+            id: senseiMsgId,
+            sender: "sensei",
+            text: data.reply,
+            timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            source: data.source || "gemini",
+          };
+          setMessages((prev) => [...prev, senseiMsg]);
+
+          // Sensei speaks reply out loud, then resumes listening seamlessly!
+          speakSenseiResponse(data.reply, () => {
+            if (studioMode === "voice" && !isMutedRef.current) {
+              setVoiceState("listening");
+              startSpeechRecognition();
+            }
+          });
+          return;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    // Offline Voice Fallback
+    const fallbackSpokenReply = "こんにちは！お声がしっかり届きましたよ。日本語の練習を続けましょう！何か質問はありますか？";
+    counterRef.current += 1;
+    const senseiMsg: ChatMessage = {
+      id: `s-${counterRef.current}`,
+      sender: "sensei",
+      text: fallbackSpokenReply,
+      timestamp: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      source: "fallback",
+    };
+    setMessages((prev) => [...prev, senseiMsg]);
+    speakSenseiResponse(fallbackSpokenReply, () => {
+      if (studioMode === "voice" && !isMutedRef.current) {
+        setVoiceState("listening");
+        startSpeechRecognition();
+      }
+    });
+  };
+
+  // --------------------------------------------------------------------------
+  // Live Voice Conversation Mode Lifecyle
+  // --------------------------------------------------------------------------
+  const startLiveVoiceConversation = async () => {
+    setRecognitionError(null);
+    setStudioMode("voice");
+    setVoiceState("thinking");
+
+    const micReady = await setupAudioAnalyser();
+    if (!micReady) {
+      setVoiceState("error");
+      return;
+    }
+
+    // Step 2: Sensei initiates natural spoken greeting
+    const welcomeGreeting = "こんにちは！日本語節のAI先生です。今日はどんな日本語について話しましょうか？";
+    speakSenseiResponse(welcomeGreeting, () => {
+      // Step 3: Automatically listen to student's response!
+      setVoiceState("listening");
+      startSpeechRecognition();
+    });
+  };
+
+  const endLiveVoiceConversation = () => {
+    stopAllAudio();
+    setVoiceState("idle");
+    setStudioMode("text");
+  };
+
+  const toggleMute = () => {
+    const nextMute = !isMuted;
+    setIsMuted(nextMute);
+    if (nextMute) {
+      if (recognitionRef.current) {
+        try {
+          recognitionRef.current.stop();
+        } catch {}
+      }
     } else {
-      startListening();
+      if (voiceState === "listening") {
+        startSpeechRecognition();
+      }
     }
   };
 
-  const copyToClipboard = (id: string, text: string) => {
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
-
   // --------------------------------------------------------------------------
-  // Message Sending & AI Response Handling
+  // Text Chat Mode Handlers
   // --------------------------------------------------------------------------
-  const handleSend = async (userText: string) => {
+  const handleSendText = async (userText: string) => {
     const query = userText.trim();
     if (!query) return;
-
-    stopListening();
 
     counterRef.current += 1;
     const currentId = counterRef.current;
@@ -449,7 +671,6 @@ export default function AISenseiPage() {
     setIsTyping(true);
 
     try {
-      // Attempt backend Gemini route with rich learner context
       const profile = getStudentProfile();
       const response = await fetch("/api/sensei", {
         method: "POST",
@@ -482,16 +703,11 @@ export default function AISenseiPage() {
           };
           setMessages((prev) => [...prev, senseiMsg]);
           setIsTyping(false);
-
-          // In conversation mode, read response automatically
-          if (conversationModeRef.current) {
-            speakText(senseiMsgId, data.reply);
-          }
           return;
         }
       }
     } catch {
-      // Fallback gracefully on network timeout
+      // fallback
     }
 
     // Local offline knowledge fallback
@@ -534,16 +750,11 @@ Would you like to explore specific example sentences, practice verb conjugations
       };
       setMessages((prev) => [...prev, senseiMsg]);
       setIsTyping(false);
-
-      if (conversationModeRef.current) {
-        speakText(senseiMsgId, reply);
-      }
     }, 600);
   };
 
   const handleClearChat = () => {
-    stopSpeaking();
-    stopListening();
+    stopAllAudio();
     counterRef.current += 1;
     setMessages([
       {
@@ -556,410 +767,149 @@ Would you like to explore specific example sentences, practice verb conjugations
     ]);
   };
 
+  const copyToClipboard = (id: string, text: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const speakSingleMessage = (msgId: string, text: string) => {
+    if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+    if (speakingMsgId === msgId) {
+      if (isPaused) {
+        window.speechSynthesis.resume();
+        setIsPaused(false);
+      } else {
+        window.speechSynthesis.pause();
+        setIsPaused(true);
+      }
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const cleaned = cleanMarkdownForSpeech(text);
+    const utterance = new SpeechSynthesisUtterance(cleaned);
+    utterance.lang = /[\u3040-\u30ff]/.test(cleaned) ? "ja-JP" : "en-US";
+    utterance.rate = speechRate;
+    utterance.onstart = () => {
+      setSpeakingMsgId(msgId);
+      setIsPaused(false);
+    };
+    utterance.onend = () => {
+      setSpeakingMsgId(null);
+      setIsPaused(false);
+    };
+    utterance.onerror = () => {
+      setSpeakingMsgId(null);
+      setIsPaused(false);
+    };
+    window.speechSynthesis.speak(utterance);
+  };
+
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Top Header */}
+      {/* Top Header & Mode Navigation Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-[#C83C50]/20 text-[#C83C50] text-xs font-semibold mb-2 border border-[#C83C50]/30">
             <Bot className="w-3.5 h-3.5" />
-            <span>AI Sensei · Multilingual Voice & Text Tutor</span>
+            <span>AI Sensei · Dedicated Japanese Teacher</span>
           </div>
           <h1 className="text-3xl font-extrabold text-[#FFFFFF] tracking-tight">
             Nihongo Setu AI Sensei
           </h1>
           <p className="text-xs text-[#E8E0D5]/70 mt-1">
-            Real-time Japanese voice conversations, Tamil/Tanglish grammar explanations, and JLPT N5 coaching.
+            Real-time human-like voice conversations, natural bilingual coaching, and JLPT N5 mastery.
           </p>
         </div>
 
-        <div className="flex items-center space-x-2 shrink-0">
-          {/* Hands-Free Conversation Mode Switch */}
+        {/* Mode Selector Tabs */}
+        <div className="flex items-center p-1 rounded-2xl bg-[#0B1323] border border-[#E8E0D5]/20 shrink-0 shadow-lg">
           <button
             onClick={() => {
-              const nextMode = !conversationMode;
-              setConversationMode(nextMode);
-              if (!nextMode) {
-                stopListening();
-                stopSpeaking();
-              } else {
-                startListening();
-              }
+              if (studioMode === "voice") endLiveVoiceConversation();
+              setStudioMode("text");
             }}
-            className={`inline-flex items-center space-x-2 px-3.5 py-1.5 rounded-xl border text-xs font-bold transition-all shadow-md ${
-              conversationMode
-                ? "bg-[#C83C50] text-[#FFFFFF] border-[#C83C50] ring-2 ring-[#C83C50]/40 animate-pulse"
-                : "bg-[#101C35] text-[#E8E0D5] border-[#E8E0D5]/20 hover:bg-[#E8E0D5]/10"
+            className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              studioMode === "text"
+                ? "bg-[#C83C50] text-[#FFFFFF] shadow-md shadow-[#C83C50]/30"
+                : "text-[#E8E0D5]/70 hover:text-[#FFFFFF]"
             }`}
           >
-            <Radio className="w-3.5 h-3.5" />
-            <span>{conversationMode ? "Voice Mode: Active" : "Start Voice Conversation"}</span>
+            <MessageSquare className="w-3.5 h-3.5" />
+            <span>Text Studio</span>
           </button>
 
           <button
-            onClick={handleClearChat}
-            className="inline-flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-[#E8E0D5]/10 hover:bg-[#E8E0D5]/20 text-[#E8E0D5] text-xs font-semibold transition-colors shrink-0"
-            title="Reset Chat Session"
+            onClick={() => {
+              if (studioMode === "text") startLiveVoiceConversation();
+            }}
+            className={`flex items-center space-x-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+              studioMode === "voice"
+                ? "bg-gradient-to-r from-[#C83C50] to-rose-600 text-[#FFFFFF] shadow-lg shadow-[#C83C50]/40 animate-pulse"
+                : "text-[#E8E0D5]/70 hover:text-[#FFFFFF]"
+            }`}
           >
-            <RotateCcw className="w-3.5 h-3.5" />
-            <span>Reset</span>
+            <Radio className="w-3.5 h-3.5" />
+            <span>Live Voice Studio</span>
           </button>
         </div>
       </div>
 
-      {/* Mic Error Banner if needed */}
+      {/* Recognition Error Notice */}
       {recognitionError && (
-        <div className="px-4 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between">
-          <div className="flex items-center space-x-2">
+        <div className="px-4 py-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center justify-between shadow-lg">
+          <div className="flex items-center space-x-2.5">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{recognitionError}</span>
           </div>
           <button
             onClick={() => setRecognitionError(null)}
-            className="text-xs underline hover:text-[#FFFFFF] ml-2"
+            className="text-xs underline hover:text-[#FFFFFF] ml-2 shrink-0 font-medium"
           >
             Dismiss
           </button>
         </div>
       )}
 
-      {/* Voice Mode Active Status Bar */}
-      {conversationMode && (
-        <div className="px-4 py-2.5 rounded-2xl bg-[#C83C50]/15 border border-[#C83C50]/40 text-xs text-[#FFFFFF] flex items-center justify-between shadow-lg">
-          <div className="flex items-center space-x-2.5">
-            <span className="relative flex h-2.5 w-2.5">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#C83C50] opacity-75" />
-              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#C83C50]" />
-            </span>
-            <span className="font-semibold">
-              Hands-Free Conversation Mode Enabled: Speak into your microphone and Sensei will reply and speak back!
-            </span>
-          </div>
-          <button
-            onClick={() => {
-              setConversationMode(false);
-              stopListening();
-              stopSpeaking();
-            }}
-            className="px-2.5 py-1 rounded-lg bg-[#C83C50] hover:bg-[#B03244] text-[#FFFFFF] text-[11px] font-bold"
-          >
-            Exit Voice Mode
-          </button>
-        </div>
-      )}
+      {/* ==================================================================== */}
+      {/* 1. DEDICATED LIVE VOICE CONVERSATION STUDIO                           */}
+      {/* ==================================================================== */}
+      {studioMode === "voice" && (
+        <div className="bg-[#0B1323] border border-[#E8E0D5]/25 rounded-3xl p-6 sm:p-8 shadow-2xl space-y-6 relative overflow-hidden">
+          {/* Ambient Background Aura */}
+          <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-[#C83C50]/10 rounded-full blur-3xl pointer-events-none" />
 
-      {/* Japanese Learning Practice Presets */}
-      <div className="bg-[#101C35] border border-[#E8E0D5]/15 rounded-2xl p-4 space-y-2.5 shadow-lg">
-        <div className="flex items-center justify-between text-xs font-bold text-[#E8E0D5]/90">
-          <div className="flex items-center space-x-2">
-            <Sparkles className="w-3.5 h-3.5 text-[#C83C50]" />
-            <span>Targeted Practice Modes:</span>
-          </div>
-          <span className="text-[10px] text-[#E8E0D5]/50 font-normal">Click any mode to begin</span>
-        </div>
-
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-          {PRACTICE_PRESETS.map((preset) => (
-            <button
-              key={preset.id}
-              onClick={() => handleSend(preset.prompt)}
-              className="p-2.5 rounded-xl bg-[#E8E0D5]/5 hover:bg-[#E8E0D5]/15 border border-[#E8E0D5]/15 text-left transition-all group flex flex-col justify-between"
-            >
-              <div>
-                <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#C83C50]/20 text-[#C83C50] font-semibold font-japanese inline-block mb-1">
-                  {preset.badge}
-                </span>
-                <div className="text-xs font-bold text-[#FFFFFF] group-hover:text-[#C83C50] transition-colors line-clamp-1">
-                  {preset.title}
-                </div>
-              </div>
-              <p className="text-[10px] text-[#E8E0D5]/60 mt-1 line-clamp-2 leading-tight">
-                {preset.desc}
-              </p>
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Suggested Prompts Shelf */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
-        <span className="text-[11px] text-[#E8E0D5]/50 shrink-0 flex items-center space-x-1 pl-1">
-          <MessageSquare className="w-3 h-3 text-[#C83C50]" />
-          <span>Quick Prompts:</span>
-        </span>
-        {SUGGESTED_PROMPTS.map((prompt, idx) => (
-          <button
-            key={idx}
-            onClick={() => handleSend(prompt)}
-            className="px-3 py-1 rounded-xl bg-[#E8E0D5]/5 hover:bg-[#E8E0D5]/15 border border-[#E8E0D5]/15 text-[#E8E0D5] text-[11px] whitespace-nowrap transition-colors"
-          >
-            {prompt}
-          </button>
-        ))}
-      </div>
-
-      {/* Chat Thread Container */}
-      <div className="bg-[#101C35] border border-[#E8E0D5]/20 rounded-3xl p-4 sm:p-6 shadow-2xl flex flex-col h-[560px]">
-        {/* Messages Scroll Area */}
-        <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-          {messages.map((msg) => {
-            const isSensei = msg.sender === "sensei";
-            const isCurrentlySpeaking = speakingId === msg.id;
-
-            return (
-              <div
-                key={msg.id}
-                className={`flex items-start space-x-3 ${
-                  isSensei ? "justify-start" : "justify-end"
+          {/* Top Status & Controls Bar */}
+          <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 border-b border-[#E8E0D5]/15 pb-4">
+            <div className="flex items-center space-x-2">
+              <span
+                className={`w-3 h-3 rounded-full ${
+                  voiceState === "listening"
+                    ? "bg-emerald-400 animate-ping"
+                    : voiceState === "speaking"
+                    ? "bg-rose-500 animate-pulse"
+                    : voiceState === "thinking"
+                    ? "bg-amber-400 animate-bounce"
+                    : "bg-gray-400"
                 }`}
-              >
-                {isSensei && (
-                  <div className="w-8 h-8 rounded-xl bg-[#C83C50] text-[#FFFFFF] flex items-center justify-center shrink-0 font-bold text-xs shadow-md shadow-[#C83C50]/20">
-                    節
-                  </div>
-                )}
-
-                <div
-                  className={`max-w-[88%] rounded-2xl p-4 space-y-2 text-xs leading-relaxed shadow-md break-words ${
-                    isSensei
-                      ? "bg-[#0B1323] text-[#FFFFFF] border border-[#E8E0D5]/15"
-                      : "bg-[#C83C50] text-[#FFFFFF] font-medium"
-                  }`}
-                >
-                  {/* Markdown Renderer for AI Sensei */}
-                  {isSensei ? (
-                    <div className="prose prose-invert prose-xs max-w-none text-[#E8E0D5] space-y-2">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          h1: ({ children }) => (
-                            <h1 className="text-base font-extrabold text-[#FFFFFF] border-b border-[#E8E0D5]/15 pb-1 my-2">
-                              {children}
-                            </h1>
-                          ),
-                          h2: ({ children }) => (
-                            <h2 className="text-sm font-bold text-[#FFFFFF] mt-3 mb-1.5 flex items-center space-x-1.5">
-                              <span className="w-1.5 h-1.5 rounded-full bg-[#C83C50] inline-block" />
-                              <span>{children}</span>
-                            </h2>
-                          ),
-                          h3: ({ children }) => (
-                            <h3 className="text-xs font-bold text-[#FFFFFF] mt-2 mb-1 text-[#C83C50]">
-                              {children}
-                            </h3>
-                          ),
-                          p: ({ children }) => (
-                            <p className="my-1.5 leading-relaxed text-[#E8E0D5]">
-                              {children}
-                            </p>
-                          ),
-                          strong: ({ children }) => (
-                            <strong className="font-bold text-[#FFFFFF]">
-                              {children}
-                            </strong>
-                          ),
-                          em: ({ children }) => (
-                            <em className="italic text-[#E8E0D5]/90">
-                              {children}
-                            </em>
-                          ),
-                          ul: ({ children }) => (
-                            <ul className="list-disc pl-4 space-y-1 my-1.5 text-[#E8E0D5]">
-                              {children}
-                            </ul>
-                          ),
-                          ol: ({ children }) => (
-                            <ol className="list-decimal pl-4 space-y-1 my-1.5 text-[#E8E0D5]">
-                              {children}
-                            </ol>
-                          ),
-                          li: ({ children }) => (
-                            <li className="my-0.5 leading-relaxed">{children}</li>
-                          ),
-                          blockquote: ({ children }) => (
-                            <blockquote className="border-l-2 border-[#C83C50] pl-3 py-1 my-2 bg-[#E8E0D5]/5 rounded-r text-[#E8E0D5]/90 italic">
-                              {children}
-                            </blockquote>
-                          ),
-                          code: ({ inline, className, children, ...props }: any) => {
-                            if (inline) {
-                              return (
-                                <code
-                                  className="px-1.5 py-0.5 rounded bg-[#101C35] text-amber-300 font-mono text-[11px] border border-[#E8E0D5]/20 font-japanese"
-                                  {...props}
-                                >
-                                  {children}
-                                </code>
-                              );
-                            }
-                            return (
-                              <pre className="p-3 rounded-xl bg-[#080E1A] border border-[#E8E0D5]/20 font-mono text-xs overflow-x-auto my-2 text-emerald-400">
-                                <code {...props}>{children}</code>
-                              </pre>
-                            );
-                          },
-                          table: ({ children }) => (
-                            <div className="overflow-x-auto my-2 border border-[#E8E0D5]/20 rounded-xl">
-                              <table className="w-full border-collapse text-left text-xs">
-                                {children}
-                              </table>
-                            </div>
-                          ),
-                          thead: ({ children }) => (
-                            <thead className="bg-[#101C35] border-b border-[#E8E0D5]/20 text-[#FFFFFF]">
-                              {children}
-                            </thead>
-                          ),
-                          tbody: ({ children }) => (
-                            <tbody className="divide-y divide-[#E8E0D5]/10">
-                              {children}
-                            </tbody>
-                          ),
-                          tr: ({ children }) => (
-                            <tr className="hover:bg-[#E8E0D5]/5">{children}</tr>
-                          ),
-                          th: ({ children }) => (
-                            <th className="px-3 py-2 font-bold text-[#FFFFFF]">
-                              {children}
-                            </th>
-                          ),
-                          td: ({ children }) => (
-                            <td className="px-3 py-2 text-[#E8E0D5]">{children}</td>
-                          ),
-                          hr: () => (
-                            <hr className="border-t border-[#E8E0D5]/20 my-3" />
-                          ),
-                        }}
-                      >
-                        {msg.text}
-                      </ReactMarkdown>
-                    </div>
-                  ) : (
-                    <div className="whitespace-pre-line">{msg.text}</div>
-                  )}
-
-                  {/* Message Bottom Action Bar */}
-                  <div className="flex items-center justify-between pt-1.5 border-t border-[#FFFFFF]/10 text-[10px] opacity-70">
-                    <div className="flex items-center space-x-2">
-                      <span>{msg.timestamp}</span>
-                      {isSensei && msg.source === "gemini" && (
-                        <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[9px]">
-                          Gemini 3.5
-                        </span>
-                      )}
-                    </div>
-
-                    {isSensei && (
-                      <div className="flex items-center space-x-2">
-                        {/* Audio Speaking Controls */}
-                        <div className="flex items-center space-x-1 bg-[#101C35] border border-[#E8E0D5]/20 rounded-lg px-1.5 py-0.5">
-                          <button
-                            onClick={() => speakText(msg.id, msg.text)}
-                            className="hover:text-[#FFFFFF] transition-colors p-0.5"
-                            title={isCurrentlySpeaking ? (isPaused ? "Resume voice" : "Pause voice") : "Listen aloud"}
-                          >
-                            {isCurrentlySpeaking ? (
-                              isPaused ? (
-                                <Play className="w-3 h-3 text-emerald-400" />
-                              ) : (
-                                <Pause className="w-3 h-3 text-amber-400 animate-pulse" />
-                              )
-                            ) : (
-                              <Volume2 className="w-3 h-3 text-[#C83C50]" />
-                            )}
-                          </button>
-
-                          {isCurrentlySpeaking && (
-                            <button
-                              onClick={stopSpeaking}
-                              className="hover:text-red-400 p-0.5"
-                              title="Stop speech"
-                            >
-                              <Square className="w-2.5 h-2.5 fill-red-400 text-red-400" />
-                            </button>
-                          )}
-                        </div>
-
-                        {/* Copy Button */}
-                        <button
-                          onClick={() => copyToClipboard(msg.id, msg.text)}
-                          className="hover:text-[#FFFFFF] p-1 rounded hover:bg-[#E8E0D5]/10 transition-colors"
-                          title="Copy text"
-                        >
-                          {copiedId === msg.id ? (
-                            <Check className="w-3 h-3 text-emerald-400" />
-                          ) : (
-                            <Copy className="w-3 h-3" />
-                          )}
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {!isSensei && (
-                  <div className="w-8 h-8 rounded-xl bg-[#E8E0D5]/20 text-[#FFFFFF] flex items-center justify-center shrink-0 font-bold text-xs">
-                    <User className="w-4 h-4" />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {isTyping && (
-            <div className="flex items-center space-x-3">
-              <div className="w-8 h-8 rounded-xl bg-[#C83C50] text-[#FFFFFF] flex items-center justify-center shrink-0 font-bold text-xs">
-                節
-              </div>
-              <div className="p-3.5 rounded-2xl bg-[#0B1323] border border-[#E8E0D5]/15 flex items-center space-x-2">
-                <span className="w-2 h-2 rounded-full bg-[#C83C50] animate-bounce" />
-                <span className="w-2 h-2 rounded-full bg-[#C83C50] animate-bounce delay-100" />
-                <span className="w-2 h-2 rounded-full bg-[#C83C50] animate-bounce delay-200" />
-                <span className="text-[11px] text-[#E8E0D5]/60 pl-1">
-                  Sensei is formulating explanation...
-                </span>
-              </div>
+              />
+              <span className="text-xs font-bold tracking-wide uppercase text-[#FFFFFF]">
+                {voiceState === "listening" && "Sensei is Listening..."}
+                {voiceState === "speaking" && "Sensei is Speaking..."}
+                {voiceState === "thinking" && "Sensei is Thinking..."}
+                {voiceState === "interrupted" && "Interrupted — Listening to you"}
+                {voiceState === "idle" && "Voice Studio Connected"}
+                {voiceState === "error" && "Voice Studio Error"}
+              </span>
             </div>
-          )}
 
-          <div ref={chatEndRef} />
-        </div>
-
-        {/* Input Form & Voice Controls */}
-        <div className="pt-4 border-t border-[#E8E0D5]/15 space-y-2">
-          {/* Active Voice Input Feedback Bar */}
-          {isListening && (
-            <div className="px-3.5 py-1.5 rounded-xl bg-[#C83C50]/20 border border-[#C83C50]/40 flex items-center justify-between text-xs text-[#FFFFFF]">
-              <div className="flex items-center space-x-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-ping" />
-                <span className="font-bold">
-                  Listening ({SPEECH_LANGUAGES.find((l) => l.code === speechLang)?.label})...
-                </span>
-                <span className="text-[11px] text-[#E8E0D5]/70 italic">Speak now</span>
-              </div>
-              <button
-                onClick={stopListening}
-                className="px-2 py-0.5 rounded bg-red-500 hover:bg-red-600 text-[10px] font-bold text-[#FFFFFF]"
-              >
-                Stop
-              </button>
-            </div>
-          )}
-
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              handleSend(input);
-            }}
-            className="flex items-center space-x-2"
-          >
-            {/* Language Selector Dropdown for Voice Input */}
-            <div className="relative shrink-0">
+            <div className="flex items-center space-x-2">
+              {/* Language Selector */}
               <select
                 value={speechLang}
                 onChange={(e) => setSpeechLang(e.target.value)}
-                className="bg-[#0B1323] border border-[#E8E0D5]/25 rounded-2xl px-2.5 py-3 text-xs text-[#FFFFFF] focus:outline-none focus:border-[#C83C50] cursor-pointer"
-                title="Select Voice Input Language"
+                className="bg-[#101C35] border border-[#E8E0D5]/20 text-[#FFFFFF] text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#C83C50]"
+                title="Spoken Language"
               >
                 {SPEECH_LANGUAGES.map((lang) => (
                   <option key={lang.code} value={lang.code} className="bg-[#101C35] text-[#FFFFFF]">
@@ -967,48 +917,492 @@ Would you like to explore specific example sentences, practice verb conjugations
                   </option>
                 ))}
               </select>
+
+              {/* Speed Selector */}
+              <select
+                value={speechRate}
+                onChange={(e) => setSpeechRate(parseFloat(e.target.value))}
+                className="bg-[#101C35] border border-[#E8E0D5]/20 text-[#FFFFFF] text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#C83C50]"
+                title="Speaking Speed"
+              >
+                <option value={0.8}>0.8x (Beginner Pace)</option>
+                <option value={0.92}>0.9x (Natural Sensei)</option>
+                <option value={1.1}>1.1x (Fluent Native)</option>
+              </select>
+            </div>
+          </div>
+
+          {/* Central Interactive Voice Orb & Reactive Audio Visualizer */}
+          <div className="relative z-10 flex flex-col items-center justify-center py-6 space-y-4">
+            <div className="relative flex items-center justify-center">
+              {/* Concentric Reactive Glow Rings */}
+              <div
+                className={`absolute w-44 h-44 rounded-full transition-all duration-700 pointer-events-none ${
+                  voiceState === "listening"
+                    ? "bg-sky-500/20 scale-125 animate-pulse"
+                    : voiceState === "speaking"
+                    ? "bg-[#C83C50]/25 scale-135 animate-ping"
+                    : voiceState === "thinking"
+                    ? "bg-amber-500/20 scale-110"
+                    : "bg-[#E8E0D5]/5 scale-100"
+                }`}
+              />
+
+              <div
+                className={`relative w-32 h-32 rounded-full flex flex-col items-center justify-center shadow-2xl transition-all duration-500 border-2 ${
+                  voiceState === "listening"
+                    ? "bg-gradient-to-tr from-[#0F2042] to-sky-700 border-sky-400 text-sky-200 shadow-sky-500/30 scale-105"
+                    : voiceState === "speaking"
+                    ? "bg-gradient-to-tr from-[#C83C50] to-rose-700 border-rose-300 text-[#FFFFFF] shadow-rose-500/40 scale-110"
+                    : voiceState === "thinking"
+                    ? "bg-gradient-to-tr from-amber-700 to-amber-900 border-amber-400 text-amber-200 shadow-amber-500/30"
+                    : "bg-[#101C35] border-[#E8E0D5]/20 text-[#FFFFFF]"
+                }`}
+              >
+                <span className="font-japanese font-black text-3xl select-none">
+                  {voiceState === "speaking" ? "先生" : voiceState === "listening" ? "聞" : "節"}
+                </span>
+                <span className="text-[10px] uppercase font-bold tracking-widest mt-1 opacity-80">
+                  {voiceState}
+                </span>
+              </div>
             </div>
 
-            {/* Message Input Box */}
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              placeholder={
-                isListening
-                  ? "Listening to your voice..."
-                  : "Ask Sensei in Japanese, Tamil, Tanglish, or English..."
-              }
-              className="flex-1 bg-[#0B1323] border border-[#E8E0D5]/25 rounded-2xl px-4 py-3 text-xs text-[#FFFFFF] placeholder-[#E8E0D5]/40 focus:outline-none focus:border-[#C83C50]"
-            />
+            {/* Live Frequency Equalizer Canvas */}
+            <div className="w-full max-w-sm h-12 flex items-center justify-center">
+              <canvas
+                ref={canvasRef}
+                width={360}
+                height={48}
+                className="w-full h-full rounded-xl bg-[#101C35]/50 border border-[#E8E0D5]/10"
+              />
+            </div>
 
-            {/* Microphone Toggle Button */}
+            <p className="text-xs text-[#E8E0D5]/80 text-center max-w-md">
+              {voiceState === "listening" && "Speak naturally into your mic. You can also interrupt Sensei anytime!"}
+              {voiceState === "speaking" && "Sensei is talking. Speak now to interrupt or click below."}
+              {voiceState === "thinking" && "Processing your Japanese inquiry..."}
+              {voiceState === "interrupted" && "Interruption detected! Listening to your new question..."}
+              {voiceState === "idle" && "Ready to talk with Sensei."}
+            </p>
+          </div>
+
+          {/* Live Bilingual Conversation Subtitles / Teleprompter */}
+          <div className="relative z-10 grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Student Transcript */}
+            <div className="bg-[#101C35] border border-[#E8E0D5]/15 rounded-2xl p-4 space-y-1.5 shadow-md">
+              <div className="flex items-center justify-between text-[11px] font-bold text-sky-400">
+                <span className="flex items-center space-x-1.5">
+                  <User className="w-3 h-3" />
+                  <span>You Spoke:</span>
+                </span>
+                {liveUserTranscript && <span className="text-[10px] text-[#E8E0D5]/50">Transcribed</span>}
+              </div>
+              <p className="text-xs text-[#FFFFFF] min-h-[44px] leading-relaxed break-words">
+                {liveUserTranscript || (
+                  <span className="text-[#E8E0D5]/40 italic">Your spoken Japanese words will stream here...</span>
+                )}
+              </p>
+            </div>
+
+            {/* Sensei Transcript */}
+            <div className="bg-[#101C35] border border-[#C83C50]/30 rounded-2xl p-4 space-y-1.5 shadow-md">
+              <div className="flex items-center justify-between text-[11px] font-bold text-rose-400">
+                <span className="flex items-center space-x-1.5">
+                  <Bot className="w-3 h-3" />
+                  <span>Sensei Replied:</span>
+                </span>
+                {liveSenseiTranscript && (
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 font-mono">
+                    Gemini 3.5 Live
+                  </span>
+                )}
+              </div>
+              <p className="text-xs text-[#FFFFFF] min-h-[44px] leading-relaxed break-words">
+                {liveSenseiTranscript || (
+                  <span className="text-[#E8E0D5]/40 italic">Sensei&apos;s natural voice response will stream here...</span>
+                )}
+              </p>
+            </div>
+          </div>
+
+          {/* Live Studio Action Bar */}
+          <div className="relative z-10 flex flex-wrap items-center justify-center gap-3 pt-2">
+            {/* Natural Interruption Button */}
+            {voiceState === "speaking" && (
+              <button
+                onClick={triggerInterruption}
+                className="px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-600 text-[#101C35] text-xs font-black flex items-center space-x-2 shadow-lg shadow-amber-500/20 transition-all animate-bounce"
+                title="Interrupt Sensei"
+              >
+                <Zap className="w-4 h-4 fill-current" />
+                <span>Interrupt Sensei</span>
+              </button>
+            )}
+
+            {/* Mute / Unmute Microphone */}
             <button
-              type="button"
-              onClick={toggleListening}
-              className={`p-3 rounded-2xl border transition-all shrink-0 ${
-                isListening
-                  ? "bg-red-600 border-red-500 text-[#FFFFFF] ring-2 ring-red-400 animate-pulse shadow-lg shadow-red-500/30"
-                  : "bg-[#0B1323] border-[#E8E0D5]/25 hover:border-[#C83C50] text-[#E8E0D5] hover:text-[#FFFFFF]"
+              onClick={toggleMute}
+              className={`px-4 py-2.5 rounded-2xl border text-xs font-bold flex items-center space-x-2 transition-all shadow-md ${
+                isMuted
+                  ? "bg-red-500/20 border-red-500/40 text-red-400"
+                  : "bg-[#101C35] border-[#E8E0D5]/20 text-[#FFFFFF] hover:bg-[#E8E0D5]/10"
               }`}
-              title={isListening ? "Stop recording speech" : "Speak to Sensei (Voice Input)"}
-              aria-label="Microphone Voice Input"
             >
-              {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+              <span>{isMuted ? "Unmute Mic" : "Mute Mic"}</span>
             </button>
 
-            {/* Send Message Button */}
+            {/* End Voice Conversation Button */}
             <button
-              type="submit"
-              disabled={!input.trim() || isTyping}
-              className="p-3 rounded-2xl bg-[#C83C50] hover:bg-[#B03244] text-[#FFFFFF] shadow-lg shadow-[#C83C50]/20 disabled:opacity-40 transition-all shrink-0"
-              aria-label="Send message"
+              onClick={endLiveVoiceConversation}
+              className="px-5 py-2.5 rounded-2xl bg-[#C83C50] hover:bg-[#B03244] text-[#FFFFFF] text-xs font-black flex items-center space-x-2 shadow-lg shadow-[#C83C50]/30 transition-all"
             >
-              <Send className="w-4 h-4" />
+              <Square className="w-3.5 h-3.5 fill-current" />
+              <span>End Live Conversation</span>
             </button>
-          </form>
+          </div>
         </div>
-      </div>
+      )}
+
+      {/* ==================================================================== */}
+      {/* 2. TEXT CHAT STUDIO WITH RICH MARKDOWN & SPEECH CONTROLS             */}
+      {/* ==================================================================== */}
+      {studioMode === "text" && (
+        <div className="space-y-6">
+          {/* Japanese Learning Practice Presets Shelf */}
+          <div className="bg-[#101C35] border border-[#E8E0D5]/15 rounded-2xl p-4 space-y-2.5 shadow-lg">
+            <div className="flex items-center justify-between text-xs font-bold text-[#E8E0D5]/90">
+              <div className="flex items-center space-x-2">
+                <Sparkles className="w-3.5 h-3.5 text-[#C83C50]" />
+                <span>Targeted Practice Modes:</span>
+              </div>
+              <button
+                onClick={startLiveVoiceConversation}
+                className="text-[11px] text-[#C83C50] hover:underline font-bold flex items-center space-x-1"
+              >
+                <span>Switch to Live Voice Studio</span>
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+              {PRACTICE_PRESETS.map((preset) => (
+                <button
+                  key={preset.id}
+                  onClick={() => handleSendText(preset.prompt)}
+                  className="p-2.5 rounded-xl bg-[#E8E0D5]/5 hover:bg-[#E8E0D5]/15 border border-[#E8E0D5]/15 text-left transition-all group flex flex-col justify-between"
+                >
+                  <div>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded bg-[#C83C50]/20 text-[#C83C50] font-semibold font-japanese inline-block mb-1">
+                      {preset.badge}
+                    </span>
+                    <div className="text-xs font-bold text-[#FFFFFF] group-hover:text-[#C83C50] transition-colors line-clamp-1">
+                      {preset.title}
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-[#E8E0D5]/60 mt-1 line-clamp-2 leading-tight">
+                    {preset.desc}
+                  </p>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Quick Prompts */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-none">
+            <span className="text-[11px] text-[#E8E0D5]/50 shrink-0 flex items-center space-x-1 pl-1">
+              <MessageSquare className="w-3 h-3 text-[#C83C50]" />
+              <span>Quick Questions:</span>
+            </span>
+            {SUGGESTED_PROMPTS.map((prompt, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleSendText(prompt)}
+                className="px-3 py-1 rounded-xl bg-[#E8E0D5]/5 hover:bg-[#E8E0D5]/15 border border-[#E8E0D5]/15 text-[#E8E0D5] text-[11px] whitespace-nowrap transition-colors"
+              >
+                {prompt}
+              </button>
+            ))}
+          </div>
+
+          {/* Chat Thread Container */}
+          <div className="bg-[#101C35] border border-[#E8E0D5]/20 rounded-3xl p-4 sm:p-6 shadow-2xl flex flex-col h-[540px]">
+            {/* Messages Scroll Area */}
+            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+              {messages.map((msg) => {
+                const isSensei = msg.sender === "sensei";
+                const isCurrentlySpeaking = speakingMsgId === msg.id;
+
+                return (
+                  <div
+                    key={msg.id}
+                    className={`flex items-start space-x-3 ${
+                      isSensei ? "justify-start" : "justify-end"
+                    }`}
+                  >
+                    {isSensei && (
+                      <div className="w-8 h-8 rounded-xl bg-[#C83C50] text-[#FFFFFF] flex items-center justify-center shrink-0 font-bold text-xs shadow-md shadow-[#C83C50]/20">
+                        節
+                      </div>
+                    )}
+
+                    <div
+                      className={`max-w-[88%] rounded-2xl p-4 space-y-2 text-xs leading-relaxed shadow-md break-words ${
+                        isSensei
+                          ? "bg-[#0B1323] text-[#FFFFFF] border border-[#E8E0D5]/15"
+                          : "bg-[#C83C50] text-[#FFFFFF] font-medium"
+                      }`}
+                    >
+                      {/* Markdown Renderer for AI Sensei */}
+                      {isSensei ? (
+                        <div className="prose prose-invert prose-xs max-w-none text-[#E8E0D5] space-y-2">
+                          <ReactMarkdown
+                            remarkPlugins={[remarkGfm]}
+                            components={{
+                              h1: ({ children }) => (
+                                <h1 className="text-base font-extrabold text-[#FFFFFF] border-b border-[#E8E0D5]/15 pb-1 my-2">
+                                  {children}
+                                </h1>
+                              ),
+                              h2: ({ children }) => (
+                                <h2 className="text-sm font-bold text-[#FFFFFF] mt-3 mb-1.5 flex items-center space-x-1.5">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-[#C83C50] inline-block" />
+                                  <span>{children}</span>
+                                </h2>
+                              ),
+                              h3: ({ children }) => (
+                                <h3 className="text-xs font-bold text-[#FFFFFF] mt-2 mb-1 text-[#C83C50]">
+                                  {children}
+                                </h3>
+                              ),
+                              p: ({ children }) => (
+                                <p className="my-1.5 leading-relaxed text-[#E8E0D5]">
+                                  {children}
+                                </p>
+                              ),
+                              strong: ({ children }) => (
+                                <strong className="font-bold text-[#FFFFFF]">
+                                  {children}
+                                </strong>
+                              ),
+                              em: ({ children }) => (
+                                <em className="italic text-[#E8E0D5]/90">
+                                  {children}
+                                </em>
+                              ),
+                              ul: ({ children }) => (
+                                <ul className="list-disc pl-4 space-y-1 my-1.5 text-[#E8E0D5]">
+                                  {children}
+                                </ul>
+                              ),
+                              ol: ({ children }) => (
+                                <ol className="list-decimal pl-4 space-y-1 my-1.5 text-[#E8E0D5]">
+                                  {children}
+                                </ol>
+                              ),
+                              li: ({ children }) => (
+                                <li className="my-0.5 leading-relaxed">{children}</li>
+                              ),
+                              blockquote: ({ children }) => (
+                                <blockquote className="border-l-2 border-[#C83C50] pl-3 py-1 my-2 bg-[#E8E0D5]/5 rounded-r text-[#E8E0D5]/90 italic">
+                                  {children}
+                                </blockquote>
+                              ),
+                              code: ({ inline, className, children, ...props }: any) => {
+                                if (inline) {
+                                  return (
+                                    <code
+                                      className="px-1.5 py-0.5 rounded bg-[#101C35] text-amber-300 font-mono text-[11px] border border-[#E8E0D5]/20 font-japanese"
+                                      {...props}
+                                    >
+                                      {children}
+                                    </code>
+                                  );
+                                }
+                                return (
+                                  <pre className="p-3 rounded-xl bg-[#080E1A] border border-[#E8E0D5]/20 font-mono text-xs overflow-x-auto my-2 text-emerald-400">
+                                    <code {...props}>{children}</code>
+                                  </pre>
+                                );
+                              },
+                              table: ({ children }) => (
+                                <div className="overflow-x-auto my-2 border border-[#E8E0D5]/20 rounded-xl">
+                                  <table className="w-full border-collapse text-left text-xs">
+                                    {children}
+                                  </table>
+                                </div>
+                              ),
+                              thead: ({ children }) => (
+                                <thead className="bg-[#101C35] border-b border-[#E8E0D5]/20 text-[#FFFFFF]">
+                                  {children}
+                                </thead>
+                              ),
+                              tbody: ({ children }) => (
+                                <tbody className="divide-y divide-[#E8E0D5]/10">
+                                  {children}
+                                </tbody>
+                              ),
+                              tr: ({ children }) => (
+                                <tr className="hover:bg-[#E8E0D5]/5">{children}</tr>
+                              ),
+                              th: ({ children }) => (
+                                <th className="px-3 py-2 font-bold text-[#FFFFFF]">
+                                  {children}
+                                </th>
+                              ),
+                              td: ({ children }) => (
+                                <td className="px-3 py-2 text-[#E8E0D5]">{children}</td>
+                              ),
+                              hr: () => (
+                                <hr className="border-t border-[#E8E0D5]/20 my-3" />
+                              ),
+                            }}
+                          >
+                            {msg.text}
+                          </ReactMarkdown>
+                        </div>
+                      ) : (
+                        <div className="whitespace-pre-line">{msg.text}</div>
+                      )}
+
+                      {/* Message Actions */}
+                      <div className="flex items-center justify-between pt-1.5 border-t border-[#FFFFFF]/10 text-[10px] opacity-70">
+                        <div className="flex items-center space-x-2">
+                          <span>{msg.timestamp}</span>
+                          {isSensei && msg.source === "gemini" && (
+                            <span className="px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 font-mono text-[9px]">
+                              Gemini 3.5
+                            </span>
+                          )}
+                        </div>
+
+                        {isSensei && (
+                          <div className="flex items-center space-x-2">
+                            {/* Speech Synthesis Play/Pause */}
+                            <div className="flex items-center space-x-1 bg-[#101C35] border border-[#E8E0D5]/20 rounded-lg px-1.5 py-0.5">
+                              <button
+                                onClick={() => speakSingleMessage(msg.id, msg.text)}
+                                className="hover:text-[#FFFFFF] transition-colors p-0.5"
+                                title={
+                                  isCurrentlySpeaking
+                                    ? isPaused
+                                      ? "Resume speech"
+                                      : "Pause speech"
+                                    : "Listen aloud"
+                                }
+                              >
+                                {isCurrentlySpeaking ? (
+                                  isPaused ? (
+                                    <Play className="w-3 h-3 text-emerald-400" />
+                                  ) : (
+                                    <Pause className="w-3 h-3 text-amber-400 animate-pulse" />
+                                  )
+                                ) : (
+                                  <Volume2 className="w-3 h-3 text-[#C83C50]" />
+                                )}
+                              </button>
+
+                              {isCurrentlySpeaking && (
+                                <button
+                                  onClick={() => {
+                                    window.speechSynthesis.cancel();
+                                    setSpeakingMsgId(null);
+                                    setIsPaused(false);
+                                  }}
+                                  className="hover:text-red-400 p-0.5"
+                                  title="Stop speech"
+                                >
+                                  <Square className="w-2.5 h-2.5 fill-red-400 text-red-400" />
+                                </button>
+                              )}
+                            </div>
+
+                            {/* Copy Text */}
+                            <button
+                              onClick={() => copyToClipboard(msg.id, msg.text)}
+                              className="hover:text-[#FFFFFF] p-1 rounded hover:bg-[#E8E0D5]/10 transition-colors"
+                              title="Copy text"
+                            >
+                              {copiedId === msg.id ? (
+                                <Check className="w-3 h-3 text-emerald-400" />
+                              ) : (
+                                <Copy className="w-3 h-3" />
+                              )}
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    {!isSensei && (
+                      <div className="w-8 h-8 rounded-xl bg-[#E8E0D5]/20 text-[#FFFFFF] flex items-center justify-center shrink-0 font-bold text-xs">
+                        <User className="w-4 h-4" />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {isTyping && (
+                <div className="flex items-center space-x-3">
+                  <div className="w-8 h-8 rounded-xl bg-[#C83C50] text-[#FFFFFF] flex items-center justify-center shrink-0 font-bold text-xs">
+                    節
+                  </div>
+                  <div className="p-3.5 rounded-2xl bg-[#0B1323] border border-[#E8E0D5]/15 flex items-center space-x-2">
+                    <span className="w-2 h-2 rounded-full bg-[#C83C50] animate-bounce" />
+                    <span className="w-2 h-2 rounded-full bg-[#C83C50] animate-bounce delay-100" />
+                    <span className="w-2 h-2 rounded-full bg-[#C83C50] animate-bounce delay-200" />
+                    <span className="text-[11px] text-[#E8E0D5]/60 pl-1">
+                      Sensei is formulating explanation...
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div ref={chatEndRef} />
+            </div>
+
+            {/* Input Form & Speech Controls */}
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                handleSendText(input);
+              }}
+              className="pt-4 border-t border-[#E8E0D5]/15 flex items-center space-x-2"
+            >
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                placeholder="Ask Sensei anything in Japanese, Tamil, Tanglish, or English..."
+                className="flex-1 bg-[#0B1323] border border-[#E8E0D5]/25 rounded-2xl px-4 py-3 text-xs text-[#FFFFFF] placeholder-[#E8E0D5]/40 focus:outline-none focus:border-[#C83C50]"
+              />
+
+              {/* Quick Microphone Button to dictate into text input */}
+              <button
+                type="button"
+                onClick={() => {
+                  startLiveVoiceConversation();
+                }}
+                className="p-3 rounded-2xl border border-[#E8E0D5]/25 bg-[#0B1323] hover:border-[#C83C50] text-[#E8E0D5] hover:text-[#FFFFFF] transition-all shrink-0"
+                title="Open Live Voice Conversation Studio"
+              >
+                <Mic className="w-4 h-4 text-[#C83C50]" />
+              </button>
+
+              <button
+                type="submit"
+                disabled={!input.trim() || isTyping}
+                className="p-3 rounded-2xl bg-[#C83C50] hover:bg-[#B03244] text-[#FFFFFF] shadow-lg shadow-[#C83C50]/20 disabled:opacity-40 transition-all shrink-0"
+                aria-label="Send message"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

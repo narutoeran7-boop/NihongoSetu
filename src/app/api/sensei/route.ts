@@ -52,6 +52,28 @@ Key Teaching Guidelines:
 4. Application & Button Context:
    - If the student asks about a button, feature, lesson, or stroke practice from the provided application context, explain the exact feature from the NihongoSetu interface accurately.`;
 
+const VOICE_CONVERSATION_SYSTEM_PROMPT = `You are Nihongo AI Sensei (日本語節の先生), a real-time spoken Japanese voice conversation tutor.
+You are talking out loud directly with your student in a 1-on-1 natural voice lesson.
+
+CRITICAL VOICE CONVERSATION DIRECTIVES:
+1. Spoken Brevity & Natural Dialogue:
+   - Your response will be SPOKEN ALOUD immediately to the student.
+   - Keep responses natural, warm, and concise: 1 to 3 sentences maximum (20 to 45 words).
+   - Use natural spoken Japanese affirmations (e.g., "はい！", "そうですね！", "なるほど！", "素晴らしい！").
+   - Always end with an engaging, friendly follow-up question to keep the voice conversation moving naturally.
+
+2. Multilingual & Adaptive:
+   - If the student speaks Japanese (e.g., 「こんにちは、先生！」), respond in natural Japanese suitable for their JLPT level (default N5: clean polite desu/masu).
+   - If the student speaks Tamil or Tanglish, seamlessly understand them and provide warm guidance with clear Japanese phrases.
+   - If the student speaks English, explain with natural spoken English and Japanese phrases.
+
+3. Natural Error Correction:
+   - If the student makes a particle, grammar, or vocabulary mistake, gently provide the natural Japanese expression in 1 spoken sentence.
+
+4. Pure Spoken Output (NO Markdown Clutter):
+   - Do NOT use markdown headings (###), bullet points (* ), horizontal dividers (---), or complex tables.
+   - Output clear, fluent, natural sentences formatted cleanly for speech synthesis.`;
+
 interface KnowledgeEntry {
   keywords: string[];
   reply: string;
@@ -208,6 +230,11 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const isVoiceMode = body.mode === "voice_conversation";
+    if (isVoiceMode && !body.instructions) {
+      instructions = VOICE_CONVERSATION_SYSTEM_PROMPT;
+    }
+
     if (body.instructions && typeof body.instructions === "string") {
       instructions = body.instructions;
     }
@@ -245,6 +272,8 @@ export async function POST(req: NextRequest) {
     geminiApiKey.length > 10
   );
 
+  const isVoiceMode = Boolean(instructions === VOICE_CONVERSATION_SYSTEM_PROMPT);
+
   if (isKeyConfigured && geminiApiKey) {
     const fullUserPrompt = contextInfo ? `${prompt}${contextInfo}` : prompt;
     const ai = new GoogleGenAI({ apiKey: geminiApiKey });
@@ -256,8 +285,8 @@ export async function POST(req: NextRequest) {
         contents: fullUserPrompt,
         config: {
           systemInstruction: instructions,
-          temperature: 0.6,
-          maxOutputTokens: 1000,
+          temperature: isVoiceMode ? 0.7 : 0.6,
+          maxOutputTokens: isVoiceMode ? 450 : 1200,
         },
       });
 
@@ -276,8 +305,8 @@ export async function POST(req: NextRequest) {
           contents: fullUserPrompt,
           config: {
             systemInstruction: instructions,
-            temperature: 0.6,
-            maxOutputTokens: 1000,
+            temperature: isVoiceMode ? 0.7 : 0.6,
+            maxOutputTokens: isVoiceMode ? 450 : 1200,
           },
         });
 
@@ -295,6 +324,12 @@ export async function POST(req: NextRequest) {
   }
 
   // 5. Intelligent Pedagogical Fallback
+  if (isVoiceMode) {
+    return NextResponse.json({
+      reply: "こんにちは！お声がしっかり聞こえましたよ。今日はどんな日本語について話しましょうか？",
+      source: "fallback",
+    });
+  }
   const lowerPrompt = prompt.toLowerCase();
   for (const entry of KNOWLEDGE_FALLBACKS) {
     if (entry.keywords.some((kw) => lowerPrompt.includes(kw.toLowerCase()))) {
