@@ -110,3 +110,4 @@ console.log(`\n=== LOCALIZATION TEST RESULTS: ${passedTests}/${totalTests} TESTS
 if (passedTests !== totalTests) {
   process.exit(1);
 }
+

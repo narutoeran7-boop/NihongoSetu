@@ -91,6 +91,18 @@ export const TRANSLATIONS = {
     script_completed: "Completed!",
     script_step_indicator: "Stroke {0} of {1}",
     script_drawing_instruction: "Draw inside the box following the numbered guides.",
+    script_mode_animate: "Animation",
+    script_mode_practice: "Guided Practice",
+    script_mode_freehand: "Freehand",
+    script_speed: "Speed",
+    script_feedback_correct: "Stroke {0} correct!",
+    script_feedback_start_near: "Start near point {0}",
+    script_feedback_direction: "Draw in the correct direction",
+    script_feedback_retry: "Stroke inaccurate, try following the guide",
+    script_all_completed: "Character complete! Excellent!",
+    script_retry_char: "Practice Again",
+    script_accuracy: "Accuracy",
+    script_practice_instruction: "Draw stroke {0} starting from the numbered circle.",
 
     // Gojuon Columns
     col_a: "a-column",
@@ -236,6 +248,18 @@ export const TRANSLATIONS = {
     script_completed: "முடிந்தது!",
     script_step_indicator: "கோடு {0} / {1}",
     script_drawing_instruction: "எண் வழிகாட்டிகளைப் பின்பற்றி பெட்டிக்குள் வரையவும்.",
+    script_mode_animate: "அனிமேஷன்",
+    script_mode_practice: "வழிகாட்டப்பட்ட பயிற்சி",
+    script_mode_freehand: "தனி வரைதல்",
+    script_speed: "வேகம்",
+    script_feedback_correct: "வரிசை {0} சரியானது!",
+    script_feedback_start_near: "புள்ளி {0} அருகில் தொடங்கவும்",
+    script_feedback_direction: "சரியான திசையில் வரையவும்",
+    script_feedback_retry: "வரிவடிவம் சரியில்லை, வழிகாட்டியைப் பின்பற்றி மீண்டும் வரையவும்",
+    script_all_completed: "எழுத்து முடிந்தது! அருமை!",
+    script_retry_char: "மீண்டும் பழகு",
+    script_accuracy: "துல்லியம்",
+    script_practice_instruction: "எண் குறிக்கப்பட்ட வட்டத்திலிருந்து வரிசை {0}-ஐ வரையவும்.",
 
     // Gojuon Columns
     col_a: "அ-வரிசை (a)",
@@ -381,6 +405,18 @@ export const TRANSLATIONS = {
     script_completed: "完了！",
     script_step_indicator: "{0} / {1} 画",
     script_drawing_instruction: "番号順にお手本をなぞって練習してください。",
+    script_mode_animate: "アニメーション",
+    script_mode_practice: "なぞり書き練習",
+    script_mode_freehand: "自由書き",
+    script_speed: "再生速度",
+    script_feedback_correct: "画数 {0} 正解！",
+    script_feedback_start_near: "開始点 {0} の近くから書き始めてください",
+    script_feedback_direction: "正しい方向で書いてください",
+    script_feedback_retry: "形が少し違います。お手本に沿って描き直してみましょう",
+    script_all_completed: "文字が完成しました！お見事！",
+    script_retry_char: "もう一度練習",
+    script_accuracy: "正確度",
+    script_practice_instruction: "番号の付いた開始点から {0} 画目を書いてください。",
 
     // Gojuon Columns
     col_a: "あ段 (a)",
@@ -455,3 +491,4 @@ export const TRANSLATIONS = {
 } as const;
 
 export type TranslationKey = keyof typeof TRANSLATIONS.en;
+

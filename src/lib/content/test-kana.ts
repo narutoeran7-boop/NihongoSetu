@@ -156,9 +156,35 @@ ALL_KANA.forEach((item) => {
 assert("All 113 Hiragana characters have exact matching stroke sequences", allHiraStrokesMatch);
 assert("All 113 Katakana characters have exact matching stroke sequences", allKataStrokesMatch);
 
+// 10. User-Specified Problem Characters (あ, い, か, が, び, ゆ, きゃ, よ)
+console.log("\n[10. User-Specified Problem Characters (あ, い, か, が, び, ゆ, きゃ, よ)]");
+const targetChecks = [
+  { char: "あ", type: "hira" as const, expected: 3, label: "あ (Hiragana 'a')" },
+  { char: "い", type: "hira" as const, expected: 2, label: "い (Hiragana 'i')" },
+  { char: "か", type: "hira" as const, expected: 3, label: "か (Hiragana 'ka')" },
+  { char: "が", type: "hira" as const, expected: 5, label: "が (Hiragana 'ga' with 2 dakuten marks)" },
+  { char: "び", type: "hira" as const, expected: 3, label: "び (Hiragana 'bi' with 2 dakuten marks)" },
+  { char: "ゆ", type: "hira" as const, expected: 2, label: "ゆ (Hiragana 'yu')" },
+  { char: "よ", type: "hira" as const, expected: 2, label: "よ (Hiragana 'yo')" },
+  { char: "きゃ", type: "hira" as const, expected: 7, label: "きゃ (Yōon 'kya': ki 4 + ya 3)" },
+  { char: "ヨ", type: "kata" as const, expected: 3, label: "ヨ (Katakana 'yo')" },
+];
+
+targetChecks.forEach(({ char, type, expected, label }) => {
+  const strokes = getKanaStrokes(char, type);
+  assert(`${label} has exactly ${expected} strokes`, strokes.length === expected, `Got ${strokes.length}`);
+
+  // Check sequential indices
+  const indicesSequential = strokes.every((s, i) => s.index === i + 1);
+  assert(`${label} has sequential stroke indices (1..${expected})`, indicesSequential);
+
+  // Check valid SVG path strings
+  const validPaths = strokes.every((s) => s.d.startsWith("M") && !s.d.includes("NaN"));
+  assert(`${label} has valid SVG path syntax with non-null coordinates`, validPaths);
+});
+
 console.log(`\n=== KANA TEST RESULTS: ${passedTests}/${totalTests} TESTS PASSED ===\n`);
 
 if (passedTests !== totalTests) {
   process.exit(1);
 }
-
