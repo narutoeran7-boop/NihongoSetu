@@ -248,7 +248,7 @@ export async function POST(req: NextRequest) {
   if (isKeyConfigured && geminiApiKey) {
     const fullUserPrompt = contextInfo ? `${prompt}${contextInfo}` : prompt;
     const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-    const targetModel = process.env.GEMINI_MODEL || "gemini-2.5-flash";
+    const targetModel = process.env.GEMINI_MODEL || "gemini-3.5-flash";
 
     try {
       const response = await ai.models.generateContent({
@@ -269,10 +269,10 @@ export async function POST(req: NextRequest) {
         });
       }
     } catch {
-      // Fallback attempt with gemini-1.5-flash in case primary model is temporarily unavailable
+      // Fallback attempt with gemini-3.1-flash-lite in case primary model is temporarily unavailable
       try {
         const response = await ai.models.generateContent({
-          model: "gemini-1.5-flash",
+          model: "gemini-3.1-flash-lite",
           contents: fullUserPrompt,
           config: {
             systemInstruction: instructions,
