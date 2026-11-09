@@ -23,7 +23,7 @@ import {
   ChevronDown,
   ShieldCheck,
 } from "lucide-react";
-import { getStudentProfile, recordStudyActivity, StudentProfile } from "@/lib/storage/studentState";
+import { getStudentProfile, recordStudyActivity, StudentProfile, DEFAULT_PROFILE } from "@/lib/storage/studentState";
 import { initOfflineSync } from "@/lib/storage/offline";
 import { syncItemToFirestore } from "@/lib/firebase/firestoreSync";
 import { firebaseLogout } from "@/lib/firebase/authService";
@@ -58,12 +58,16 @@ export default function PortalLayout({
   const pathname = usePathname();
   const router = useRouter();
   const { language, setLanguage, t, languages } = useLanguage();
-  const [profile, setProfile] = useState<StudentProfile>(() => recordStudyActivity());
+  const [profile, setProfile] = useState<StudentProfile>(DEFAULT_PROFILE);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [langDropdownOpen, setLangDropdownOpen] = useState(false);
 
   useEffect(() => {
+    // Initialize student profile from browser storage after mount (guarantees 100% hydration match)
+    const activeProfile = recordStudyActivity();
+    setProfile(activeProfile);
+
     const cleanup = initOfflineSync(syncItemToFirestore);
     return cleanup;
   }, []);

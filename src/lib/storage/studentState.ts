@@ -32,14 +32,14 @@ export interface PrototypeState {
   best: number;
 }
 
-const DEFAULT_PROFILE: StudentProfile = {
+export const DEFAULT_PROFILE: StudentProfile = {
   name: "Japanese Learner",
   email: "student@nihongosetu.org",
   role: "student",
   targetLevel: "N5",
   nativeLanguage: "en",
-  streak: 3,
-  lastActive: new Date().toISOString(),
+  streak: 1,
+  lastActive: "",
   learnedKanji: ["日", "一", "国", "会", "人", "年", "大"],
   learnedVocab: ["わたし", "あなた", "にほんご", "せんせい", "がくせい", "はい", "いいえ"],
   mockScores: [

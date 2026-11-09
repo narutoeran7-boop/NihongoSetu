@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   Flame,
@@ -14,14 +14,18 @@ import {
   Bot,
   Headphones,
 } from "lucide-react";
-import { getStudentProfile, StudentProfile } from "@/lib/storage/studentState";
+import { getStudentProfile, StudentProfile, DEFAULT_PROFILE } from "@/lib/storage/studentState";
 import { KANJI_DATA } from "@/data/kanji";
 import { CORE_VOCABULARY } from "@/data/vocab";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
 
 export default function StudentDashboardPage() {
   const { t } = useLanguage();
-  const [profile] = useState<StudentProfile>(() => getStudentProfile());
+  const [profile, setProfile] = useState<StudentProfile>(DEFAULT_PROFILE);
+
+  useEffect(() => {
+    setProfile(getStudentProfile());
+  }, []);
 
   const totalKanjiAvailable = Object.values(KANJI_DATA).flat().length;
   const learnedKanjiCount = profile?.learnedKanji?.length || 0;
