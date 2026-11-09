@@ -32,9 +32,9 @@ console.log("=== RUNNING NIHONGOSETU KANA AUDIT & VALIDATION TESTS ===\n");
 console.log("[1. Character Counts]");
 assert("Basic Gojuon has exactly 46 characters", BASIC_KANA.length === 46, `Got: ${BASIC_KANA.length}`);
 assert("Dakuon / Handakuon has exactly 25 characters", DAKUON_KANA.length === 25, `Got: ${DAKUON_KANA.length}`);
-assert("Yoon has exactly 33 combinations (21 unvoiced + 12 voiced/semi-voiced)", YOON_KANA.length === 33, `Got: ${YOON_KANA.length}`);
-assert("Small Kana has exactly 9 characters", SMALL_KANA.length === 9, `Got: ${SMALL_KANA.length}`);
-assert("ALL_KANA total equals 113 items", ALL_KANA.length === 113, `Got: ${ALL_KANA.length}`);
+assert("Yoon has exactly 36 combinations (21 unvoiced + 15 voiced/semi-voiced)", YOON_KANA.length === 36, `Got: ${YOON_KANA.length}`);
+assert("Small Kana has exactly 12 characters", SMALL_KANA.length === 12, `Got: ${SMALL_KANA.length}`);
+assert("ALL_KANA total equals 119 items", ALL_KANA.length === 119, `Got: ${ALL_KANA.length}`);
 
 // 2. Uniqueness & No Duplicates
 console.log("\n[2. Uniqueness & Integrity]");
@@ -92,14 +92,15 @@ const yoonHira = YOON_KANA.map((k) => k.hira);
 assert("Contains Unvoiced Yoon (きゃ きゅ きょ ...)", ["きゃ", "きゅ", "きょ", "しゃ", "しゅ", "しょ"].every((c) => yoonHira.includes(c)));
 assert("Contains Voiced Gya-row (ぎゃ ぎゅ ぎょ)", ["ぎゃ", "ぎゅ", "ぎょ"].every((c) => yoonHira.includes(c)));
 assert("Contains Voiced Ja-row (じゃ じゅ じょ)", ["じゃ", "じゅ", "じょ"].every((c) => yoonHira.includes(c)));
+assert("Contains Voiced Dja-row (ぢゃ ぢゅ ぢょ)", ["ぢゃ", "ぢゅ", "ぢょ"].every((c) => yoonHira.includes(c)));
 assert("Contains Voiced Bya-row (びゃ びゅ びょ)", ["びゃ", "びゅ", "びょ"].every((c) => yoonHira.includes(c)));
 assert("Contains Semi-Voiced Pya-row (ぴゃ ぴゅ ぴょ)", ["ぴゃ", "ぴゅ", "ぴょ"].every((c) => yoonHira.includes(c)));
 
 // 6. Small Kana Coverage
 console.log("\n[6. Small Kana Coverage]");
 const smallHira = SMALL_KANA.map((k) => k.hira);
-const expectedSmall = ["ぁ", "ぃ", "ぅ", "ぇ", "ぉ", "ゃ", "ゅ", "ょ", "っ"];
-assert("Contains all 9 standard small Kana characters", expectedSmall.every((c) => smallHira.includes(c)));
+const expectedSmall = ["ぁ", "ぃ", "ぅ", "ぇ", "ぉ", "ゃ", "ゅ", "ょ", "っ", "ゎ", "ゕ", "ゖ"];
+assert("Contains all 12 small Kana characters", expectedSmall.every((c) => smallHira.includes(c)));
 
 // 7. Stroke Data Integrity
 console.log("\n[7. Stroke Data Integrity]");
@@ -137,8 +138,8 @@ Object.entries(hiraExpectedCounts).forEach(([char, count]) => {
   );
 });
 
-// 9. All 113 Kana Stroke Engine Coverage
-console.log("\n[9. Full 113 Kana Stroke Engine Validation]");
+// 9. All 119 Kana Stroke Engine Coverage
+console.log("\n[9. Full 119 Kana Stroke Engine Validation]");
 let allHiraStrokesMatch = true;
 let allKataStrokesMatch = true;
 ALL_KANA.forEach((item) => {
@@ -153,8 +154,8 @@ ALL_KANA.forEach((item) => {
     console.error(`  Mismatch kata '${item.kata}': expected ${item.strokes.kata}, got ${kStrokes ? kStrokes.length : 0}`);
   }
 });
-assert("All 113 Hiragana characters have exact matching stroke sequences", allHiraStrokesMatch);
-assert("All 113 Katakana characters have exact matching stroke sequences", allKataStrokesMatch);
+assert("All 119 Hiragana characters have exact matching stroke sequences", allHiraStrokesMatch);
+assert("All 119 Katakana characters have exact matching stroke sequences", allKataStrokesMatch);
 
 // 10. User-Specified Problem Characters (あ, い, か, が, び, ゆ, きゃ, よ)
 console.log("\n[10. User-Specified Problem Characters (あ, い, か, が, び, ゆ, きゃ, よ)]");

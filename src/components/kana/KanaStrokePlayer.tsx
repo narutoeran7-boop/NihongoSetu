@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { KanaStroke, getKanaStrokes } from "@/data/kanaStrokes";
+import { KanaStroke, getKanaStrokes, KANJIVG_VIEWBOX } from "@/data/kanaStrokes";
 import { useLanguage } from "@/lib/i18n/LanguageContext";
 import {
   Play,
@@ -125,9 +125,9 @@ export default function KanaStrokePlayer({
     const start = points[0];
     const end = points[points.length - 1];
 
-    // 1. Proximity check on start point (distance in 100x100 space)
+    // 1. Proximity check on start point (distance in 109x109 KanjiVG space)
     const distToStart = Math.hypot(start.x - expected.startPoint.x, start.y - expected.startPoint.y);
-    if (distToStart > 24) {
+    if (distToStart > 26) {
       setPracticeFeedback({
         type: "error",
         message: t("script_feedback_start_near", practiceStep + 1),
@@ -201,8 +201,8 @@ export default function KanaStrokePlayer({
     setIsDrawing(true);
     const { x, y } = getCanvasCoords(e);
 
-    // Save normalized 0..100 coordinate
-    drawnPointsRef.current = [{ x: (x / canvas.width) * 100, y: (y / canvas.height) * 100 }];
+    // Save normalized 0..109 KanjiVG coordinate
+    drawnPointsRef.current = [{ x: (x / canvas.width) * 109, y: (y / canvas.height) * 109 }];
 
     ctx.beginPath();
     ctx.moveTo(x, y);
@@ -220,7 +220,7 @@ export default function KanaStrokePlayer({
     if (!ctx) return;
 
     const { x, y } = getCanvasCoords(e);
-    drawnPointsRef.current.push({ x: (x / canvas.width) * 100, y: (y / canvas.height) * 100 });
+    drawnPointsRef.current.push({ x: (x / canvas.width) * 109, y: (y / canvas.height) * 109 });
 
     ctx.lineTo(x, y);
     ctx.stroke();
@@ -377,7 +377,7 @@ export default function KanaStrokePlayer({
 
         {/* Authentic SVG Stroke Animator & Guide Engine */}
         <svg
-          viewBox="0 0 100 100"
+          viewBox={KANJIVG_VIEWBOX}
           className="absolute inset-0 w-full h-full pointer-events-none"
         >
           {/* 1. Static Reference Guide Overlay (Identical matching vector geometry) */}
@@ -405,6 +405,8 @@ export default function KanaStrokePlayer({
               const isCurrent = strokeNum === currentStep;
               if (!isVisible) return null;
 
+              const pos = stroke.numberPoint || { x: stroke.startPoint.x - 4, y: stroke.startPoint.y - 4 };
+
               return (
                 <g key={`anim-stroke-${idx}`}>
                   {isCurrent && (
@@ -428,15 +430,16 @@ export default function KanaStrokePlayer({
                     className="transition-all duration-300"
                   />
                   {showNumbers && (
-                    <g transform={`translate(${stroke.startPoint.x - 4}, ${stroke.startPoint.y - 4})`}>
-                      <circle cx="4" cy="4" r="5" fill="#C83C50" stroke="#FFFFFF" strokeWidth="1" />
+                    <g>
+                      <circle cx={pos.x} cy={pos.y} r="5.2" fill="#C83C50" stroke="#FFFFFF" strokeWidth="1" />
                       <text
-                        x="4"
-                        y="5.8"
-                        fontSize="4.8"
+                        x={pos.x}
+                        y={pos.y + 0.3}
+                        fontSize="5"
                         fontWeight="bold"
                         fill="#FFFFFF"
                         textAnchor="middle"
+                        dominantBaseline="central"
                         className="select-none pointer-events-none"
                       >
                         {strokeNum}
@@ -470,28 +473,27 @@ export default function KanaStrokePlayer({
                   const isPassed = idx < practiceStep;
                   const badgeColor = isPassed ? "#10B981" : isCurrent ? "#C83C50" : "#E8E0D5";
                   const textColor = isPassed || isCurrent ? "#FFFFFF" : "#101C35";
+                  const pos = stroke.numberPoint || { x: stroke.startPoint.x - 4, y: stroke.startPoint.y - 4 };
 
                   return (
-                    <g
-                      key={`practice-badge-${idx}`}
-                      transform={`translate(${stroke.startPoint.x - 4}, ${stroke.startPoint.y - 4})`}
-                    >
+                    <g key={`practice-badge-${idx}`}>
                       <circle
-                        cx="4"
-                        cy="4"
-                        r={isCurrent ? "5.5" : "4.5"}
+                        cx={pos.x}
+                        cy={pos.y}
+                        r={isCurrent ? "6" : "5"}
                         fill={badgeColor}
                         stroke="#FFFFFF"
                         strokeWidth="1"
                         className={isCurrent ? "animate-bounce" : ""}
                       />
                       <text
-                        x="4"
-                        y="5.8"
-                        fontSize="4.8"
+                        x={pos.x}
+                        y={pos.y + 0.3}
+                        fontSize="5"
                         fontWeight="bold"
                         fill={textColor}
                         textAnchor="middle"
+                        dominantBaseline="central"
                         className="select-none pointer-events-none"
                       >
                         {idx + 1}

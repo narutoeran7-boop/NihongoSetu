@@ -58,8 +58,8 @@ DAKUON_KANA.forEach((item) => {
 });
 console.log(`  Passed: ${dakuPassed} / ${dakuChecked}`);
 
-// 4. Validate Yōon (33 characters)
-console.log("\n4. Yōon Combinations (33 combinations):");
+// 4. Validate Yōon (36 combinations)
+console.log("\n4. Yōon Combinations (36 combinations):");
 let yoonChecked = 0;
 let yoonPassed = 0;
 YOON_KANA.forEach((item) => {
@@ -77,8 +77,8 @@ YOON_KANA.forEach((item) => {
 });
 console.log(`  Passed: ${yoonPassed} / ${yoonChecked}`);
 
-// 5. Validate Small Kana (9 characters)
-console.log("\n5. Small Kana (9 characters):");
+// 5. Validate Small Kana (12 characters)
+console.log("\n5. Small Kana (12 characters):");
 let smallChecked = 0;
 let smallPassed = 0;
 SMALL_KANA.forEach((item) => {
@@ -101,6 +101,6 @@ if (errors.length > 0) {
   errors.slice(0, 15).forEach((e) => console.error(`  - ${e}`));
   process.exit(1);
 } else {
-  console.log(`\nALL 113 KANA ITEMS (226 SCRIPT VARIANTS) PASSED WITH 100% ACCURACY!`);
+  console.log(`\nALL 119 KANA ITEMS (238 SCRIPT VARIANTS) PASSED WITH 100% ACCURACY!`);
 }
 

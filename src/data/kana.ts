@@ -187,6 +187,11 @@ export const YOON_KANA: KanaItem[] = [
   { id: "yoon-ju", hira: "じゅ", kata: "ジュ", romaji: "ju", category: "yoon", strokes: { hira: 5, kata: 7 } },
   { id: "yoon-jo", hira: "じょ", kata: "ジョ", romaji: "jo", category: "yoon", strokes: { hira: 5, kata: 8 } },
 
+  // Dja-Row (Voiced ぢ)
+  { id: "yoon-dja", hira: "ぢゃ", kata: "ヂャ", romaji: "ja", category: "yoon", strokes: { hira: 7, kata: 7 } },
+  { id: "yoon-dju", hira: "ぢゅ", kata: "ヂュ", romaji: "ju", category: "yoon", strokes: { hira: 6, kata: 7 } },
+  { id: "yoon-djo", hira: "ぢょ", kata: "ヂョ", romaji: "jo", category: "yoon", strokes: { hira: 6, kata: 8 } },
+
   // Bya-Row (Voiced)
   { id: "yoon-bya", hira: "びゃ", kata: "ビャ", romaji: "bya", category: "yoon", strokes: { hira: 6, kata: 6 } },
   { id: "yoon-byu", hira: "びゅ", kata: "ビュ", romaji: "byu", category: "yoon", strokes: { hira: 5, kata: 6 } },
@@ -199,7 +204,7 @@ export const YOON_KANA: KanaItem[] = [
 ];
 
 // ------------------------------------------------------------------------------
-// 4. SMALL KANA (小さいかな — 9 CHARACTERS)
+// 4. SMALL KANA (小さいかな — 12 CHARACTERS)
 // ------------------------------------------------------------------------------
 export const SMALL_KANA: KanaItem[] = [
   { id: "small-a", hira: "ぁ", kata: "ァ", romaji: "(a)", category: "small", strokes: { hira: 3, kata: 2 } },
@@ -211,6 +216,9 @@ export const SMALL_KANA: KanaItem[] = [
   { id: "small-yu", hira: "ゅ", kata: "ュ", romaji: "(yu)", category: "small", strokes: { hira: 2, kata: 2 } },
   { id: "small-yo", hira: "ょ", kata: "ョ", romaji: "(yo)", category: "small", strokes: { hira: 2, kata: 3 } },
   { id: "small-tsu", hira: "っ", kata: "ッ", romaji: "(tsu / sokuon)", category: "small", strokes: { hira: 1, kata: 3 } },
+  { id: "small-wa", hira: "ゎ", kata: "ヮ", romaji: "(wa)", category: "small", strokes: { hira: 2, kata: 2 } },
+  { id: "small-ka", hira: "ゕ", kata: "ヵ", romaji: "(ka)", category: "small", strokes: { hira: 3, kata: 2 } },
+  { id: "small-ke", hira: "ゖ", kata: "ヶ", romaji: "(ke)", category: "small", strokes: { hira: 3, kata: 3 } },
 ];
 
 // Complete collection for lookup & validation
