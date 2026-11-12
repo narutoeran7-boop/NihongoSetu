@@ -83,6 +83,7 @@ export default function PortalLayout({
 
   const handleLogout = async () => {
     try {
+      await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
       await firebaseLogout().catch(() => {});
       localStorage.removeItem("nihongo_user");
       if (typeof document !== "undefined") {
@@ -91,7 +92,7 @@ export default function PortalLayout({
     } catch {
       // ignore
     }
-    router.push("/login");
+    window.location.href = "/login";
   };
 
   return (

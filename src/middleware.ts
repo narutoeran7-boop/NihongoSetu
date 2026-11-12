@@ -3,20 +3,31 @@ import type { NextRequest } from "next/server";
 
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  const sessionCookie = req.cookies.get("nihongo_session")?.value;
+  const rawCookie = req.cookies.get("nihongo_session")?.value;
 
-  let sessionUser: { email?: string; role?: string; name?: string } | null = null;
-  if (sessionCookie) {
+  let sessionUser: { email?: string; role?: string; name?: string; isDemo?: boolean } | null = null;
+  if (rawCookie) {
     try {
-      sessionUser = JSON.parse(decodeURIComponent(sessionCookie));
+      let decoded = rawCookie;
+      try {
+        decoded = decodeURIComponent(decoded);
+      } catch {}
+      try {
+        decoded = decodeURIComponent(decoded);
+      } catch {}
+      sessionUser = JSON.parse(decoded);
     } catch {
-      sessionUser = null;
+      try {
+        sessionUser = JSON.parse(rawCookie);
+      } catch {
+        sessionUser = null;
+      }
     }
   }
 
   // 1. Admin route protection: strictly requires verified session with role === 'admin'
   if (pathname.startsWith("/admin")) {
-    if (!sessionUser) {
+    if (!sessionUser || !sessionUser.email) {
       const loginUrl = new URL("/login", req.url);
       loginUrl.searchParams.set("redirect", pathname);
       return NextResponse.redirect(loginUrl);
@@ -31,7 +42,7 @@ export function middleware(req: NextRequest) {
 
   // 2. Student portal route protection: strictly requires active user session
   if (pathname.startsWith("/portal")) {
-    if (!sessionUser) {
+    if (!sessionUser || !sessionUser.email) {
       const loginUrl = new URL("/login", req.url);
       loginUrl.searchParams.set("redirect", pathname);
       return NextResponse.redirect(loginUrl);
@@ -44,4 +55,3 @@ export function middleware(req: NextRequest) {
 export const config = {
   matcher: ["/admin/:path*", "/portal/:path*"],
 };
-

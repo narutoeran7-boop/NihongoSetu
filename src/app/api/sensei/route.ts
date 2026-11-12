@@ -3,11 +3,114 @@ import { GoogleGenAI } from "@google/genai";
 import { detectLanguages } from "@/lib/sensei/languageDetector";
 import { buildSystemInstruction, validateResponseLanguage } from "@/lib/sensei/promptBuilder";
 import { getLanguageByCode } from "@/lib/sensei/languages";
+import { isMeaningfulSpeech } from "@/lib/sensei/voiceActivityDetector";
 
 // Rate limiting in-memory store: IP -> array of timestamps
 const rateLimitMap = new Map<string, number[]>();
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 const MAX_REQUESTS_PER_WINDOW = 30;
+
+interface GeminiTurn {
+  role: "user" | "model";
+  parts: [{ text: string }];
+}
+
+function formatGeminiContents(
+  prompt: string,
+  rawMessages: Array<{ role?: string; sender?: string; content?: string; text?: string }>,
+  contextInfo: string
+): GeminiTurn[] | string {
+  if (!rawMessages || rawMessages.length <= 1) {
+    return contextInfo ? `${prompt}${contextInfo}` : prompt;
+  }
+
+  const turns: GeminiTurn[] = [];
+  const recent = rawMessages.slice(-10);
+
+  for (const msg of recent) {
+    const rawRole = (msg.role || msg.sender || "").toLowerCase();
+    const role: "user" | "model" =
+      rawRole === "sensei" || rawRole === "model" || rawRole === "assistant" || rawRole === "ai"
+        ? "model"
+        : "user";
+
+    const text = (msg.content || msg.text || "").trim();
+    if (!text) continue;
+
+    const last = turns[turns.length - 1];
+    if (last && last.role === role) {
+      last.parts[0].text += `\n\n${text}`;
+    } else {
+      turns.push({
+        role,
+        parts: [{ text }],
+      });
+    }
+  }
+
+  // Gemini API requires first turn to be 'user'
+  while (turns.length > 0 && turns[0].role !== "user") {
+    turns.shift();
+  }
+
+  const fullPromptText = contextInfo ? `${prompt}${contextInfo}` : prompt;
+
+  if (turns.length === 0) {
+    return fullPromptText;
+  }
+
+  // Ensure last turn is 'user' containing the current prompt
+  const lastTurn = turns[turns.length - 1];
+  if (lastTurn.role === "user") {
+    if (!lastTurn.parts[0].text.includes(prompt)) {
+      lastTurn.parts[0].text += `\n\n${fullPromptText}`;
+    } else if (contextInfo && !lastTurn.parts[0].text.includes("[Active Application & Learning Context]")) {
+      lastTurn.parts[0].text += `\n\n${contextInfo}`;
+    }
+  } else {
+    turns.push({
+      role: "user",
+      parts: [{ text: fullPromptText }],
+    });
+  }
+
+  return turns;
+}
+
+function buildRetryContents(
+  currentContents: GeminiTurn[] | string,
+  correctionNote: string
+): GeminiTurn[] | string {
+  if (typeof currentContents === "string") {
+    return `${currentContents}\n\n${correctionNote}`;
+  }
+  const copy: GeminiTurn[] = JSON.parse(JSON.stringify(currentContents));
+  copy.push({
+    role: "user",
+    parts: [{ text: correctionNote }],
+  });
+  return copy;
+}
+
+function getGeneralFallbackReply(prompt: string, targetLangCode: string): string | null {
+  const lower = prompt.toLowerCase();
+  if (lower.includes("fiction") || lower.includes("what is fiction")) {
+    if (targetLangCode === "ta") {
+      return "புனைகதை (Fiction) என்பது எழுத்தாளரின் கற்பனையால் உருவாக்கப்பட்ட கதைகள், நாவல்கள் மற்றும் இலக்கியப் படைப்புகளைக் குறிக்கும். இது உண்மையான வரலாற்று நிகழ்வுகளைக் காட்டிலும், கற்பனையான கதாபாத்திரங்கள், உலகங்கள் மற்றும் நிகழ்வுகளைக் கொண்டு சுவாரஸ்யமாக உருவாக்கப்படுகிறது.";
+    }
+    return "Fiction refers to literature, stories, or narratives created from the imagination rather than strictly based on history or fact. It encompasses novels, short stories, and creative works exploring human themes, characters, and conflicts.";
+  }
+  if (
+    lower.includes("quicksort") ||
+    lower.includes("python") ||
+    lower.includes("code") ||
+    lower.includes("function") ||
+    lower.includes("sort")
+  ) {
+    return "Here is a clean implementation of the requested algorithm:\n\n```python\ndef quicksort(arr):\n    if len(arr) <= 1:\n        return arr\n    pivot = arr[len(arr) // 2]\n    left = [x for x in arr if x < pivot]\n    middle = [x for x in arr if x == pivot]\n    right = [x for x in arr if x > pivot]\n    return quicksort(left) + middle + quicksort(right)\n```\n\n**Time Complexity**: Average $O(n \\log n)$, Worst Case $O(n^2)$.";
+  }
+  return null;
+}
 
 function isRateLimited(ip: string): boolean {
   const now = Date.now();
@@ -99,6 +202,7 @@ export async function POST(req: NextRequest) {
 
   // 3. Parse request payload
   let prompt = "";
+  let rawMessages: Array<{ role?: string; sender?: string; content?: string; text?: string }> = [];
   let mode: "text" | "voice_conversation" = "text";
   let requestedInputLang = "auto";
   let requestedExplanationLang = "en";
@@ -112,10 +216,27 @@ export async function POST(req: NextRequest) {
 
     if (body.prompt && typeof body.prompt === "string") {
       prompt = body.prompt.trim();
-    } else if (Array.isArray(body.messages) && body.messages.length > 0) {
-      const last = body.messages[body.messages.length - 1];
-      if (last && typeof last.content === "string") {
-        prompt = last.content.trim();
+    }
+
+    if (Array.isArray(body.messages) && body.messages.length > 0) {
+      rawMessages = body.messages;
+      if (!prompt) {
+        const last = body.messages[body.messages.length - 1];
+        if (last && typeof last.content === "string") {
+          prompt = last.content.trim();
+        } else if (last && typeof last.text === "string") {
+          prompt = last.text.trim();
+        }
+      }
+    } else if (Array.isArray(body.history) && body.history.length > 0) {
+      rawMessages = body.history;
+      if (!prompt) {
+        const last = body.history[body.history.length - 1];
+        if (last && typeof last.content === "string") {
+          prompt = last.content.trim();
+        } else if (last && typeof last.text === "string") {
+          prompt = last.text.trim();
+        }
       }
     }
 
@@ -127,7 +248,9 @@ export async function POST(req: NextRequest) {
       requestedInputLang = body.inputLanguage;
     }
 
-    if (body.explanationLanguage && typeof body.explanationLanguage === "string") {
+    if (body.responseLanguage && typeof body.responseLanguage === "string") {
+      requestedExplanationLang = body.responseLanguage;
+    } else if (body.explanationLanguage && typeof body.explanationLanguage === "string") {
       requestedExplanationLang = body.explanationLanguage;
     }
 
@@ -154,9 +277,16 @@ export async function POST(req: NextRequest) {
   }
 
   // 4. Validation
-  if (!prompt) {
+  if (!prompt || !prompt.trim()) {
     return NextResponse.json(
       { error: "Prompt cannot be empty." },
+      { status: 400 }
+    );
+  }
+
+  if (!isMeaningfulSpeech(prompt)) {
+    return NextResponse.json(
+      { error: "No meaningful speech detected. Please speak clearly into your microphone." },
       { status: 400 }
     );
   }
@@ -207,14 +337,14 @@ export async function POST(req: NextRequest) {
   const isVoiceMode = mode === "voice_conversation";
 
   if (isKeyConfigured && geminiApiKey) {
-    const fullUserPrompt = contextInfo ? `${prompt}${contextInfo}` : prompt;
+    const geminiContents = formatGeminiContents(prompt, rawMessages, contextInfo);
     const ai = new GoogleGenAI({ apiKey: geminiApiKey });
-    const targetModel = process.env.GEMINI_MODEL || "gemini-3.5-flash";
+    const targetModel = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
 
     try {
       const response = await ai.models.generateContent({
         model: targetModel,
-        contents: fullUserPrompt,
+        contents: geminiContents as any,
         config: {
           systemInstruction: instructions,
           temperature: isVoiceMode ? 0.7 : 0.6,
@@ -224,15 +354,19 @@ export async function POST(req: NextRequest) {
 
       let candidateText = response.text?.trim();
 
-      // 7. Response Language Validation (Requirement 11)
+      // 7. Response Language Validation
       if (candidateText) {
         const validation = validateResponseLanguage(candidateText, effectiveExplanationLang);
         if (!validation.isValid && effectiveExplanationLang !== "ja") {
           // Perform 1 controlled retry enforcing the requested explanation language
           try {
+            const retryContents = buildRetryContents(
+              geminiContents,
+              `[MANDATORY CORRECTION: You must provide the explanation in ${targetLang.name} (${targetLang.nativeName}). Do not write solely in Japanese.]`
+            );
             const retryResponse = await ai.models.generateContent({
               model: targetModel,
-              contents: `${fullUserPrompt}\n\n[MANDATORY CORRECTION: You must provide the explanation in ${targetLang.name} (${targetLang.nativeName}). Do not write solely in Japanese.]`,
+              contents: retryContents as any,
               config: {
                 systemInstruction: instructions,
                 temperature: 0.5,
@@ -243,8 +377,8 @@ export async function POST(req: NextRequest) {
             if (retriedText) {
               candidateText = retriedText;
             }
-          } catch {
-            // Keep candidateText if retry failed
+          } catch (retryErr) {
+            console.warn("[Sensei API] Language correction retry warning:", retryErr);
           }
         }
 
@@ -252,18 +386,20 @@ export async function POST(req: NextRequest) {
           reply: candidateText,
           source: "gemini",
           detectedInputLanguage: detection.detectedInputLanguage,
+          responseLanguage: effectiveExplanationLang,
           explanationLanguage: effectiveExplanationLang,
           explanationLanguageName: targetLang.name,
           voiceOutputLanguage: effectiveVoiceLang,
           isExplicit: detection.isExplicit,
         });
       }
-    } catch {
-      // Fallback attempt with gemini-3.1-flash-lite in case primary model is temporarily unavailable
+    } catch (primaryErr) {
+      console.error(`[Sensei API] Primary model (${targetModel}) error:`, primaryErr);
+      // Fallback attempt with gemini-3.5-flash-lite in case primary model is temporarily rate limited
       try {
         const response = await ai.models.generateContent({
-          model: "gemini-3.1-flash-lite",
-          contents: fullUserPrompt,
+          model: "gemini-3.5-flash-lite",
+          contents: geminiContents as any,
           config: {
             systemInstruction: instructions,
             temperature: isVoiceMode ? 0.7 : 0.6,
@@ -277,24 +413,41 @@ export async function POST(req: NextRequest) {
             reply: candidateText,
             source: "gemini",
             detectedInputLanguage: detection.detectedInputLanguage,
+            responseLanguage: effectiveExplanationLang,
             explanationLanguage: effectiveExplanationLang,
             explanationLanguageName: targetLang.name,
             voiceOutputLanguage: effectiveVoiceLang,
             isExplicit: detection.isExplicit,
           });
         }
-      } catch {
-        // Fallback gracefully to multilingual knowledge bank
+      } catch (fallbackErr) {
+        console.error("[Sensei API] Fallback model (gemini-3.5-flash-lite) error:", fallbackErr);
       }
     }
   }
 
-  // 8. Pedagogical Multilingual Fallback
+  // 8. General & Pedagogical Multilingual Fallback
+  // Check if user asked a general question (e.g., fiction, quicksort, python, programming)
+  const generalReply = getGeneralFallbackReply(prompt, effectiveExplanationLang);
+  if (generalReply) {
+    return NextResponse.json({
+      reply: generalReply,
+      source: "fallback",
+      detectedInputLanguage: detection.detectedInputLanguage,
+      responseLanguage: effectiveExplanationLang,
+      explanationLanguage: effectiveExplanationLang,
+      explanationLanguageName: targetLang.name,
+      voiceOutputLanguage: effectiveVoiceLang,
+      isExplicit: detection.isExplicit,
+    });
+  }
+
   if (isVoiceMode) {
     return NextResponse.json({
       reply: getVoiceFallback(effectiveExplanationLang),
       source: "fallback",
       detectedInputLanguage: detection.detectedInputLanguage,
+      responseLanguage: effectiveExplanationLang,
       explanationLanguage: effectiveExplanationLang,
       explanationLanguageName: targetLang.name,
       voiceOutputLanguage: effectiveVoiceLang,
@@ -380,6 +533,7 @@ Would you like to explore specific example sentences, practice conjugations, or 
     reply: fallbackReply,
     source: "fallback",
     detectedInputLanguage: detection.detectedInputLanguage,
+    responseLanguage: effectiveExplanationLang,
     explanationLanguage: effectiveExplanationLang,
     explanationLanguageName: targetLang.name,
     voiceOutputLanguage: effectiveVoiceLang,

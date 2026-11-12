@@ -106,6 +106,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const logout = useCallback(() => {
     try {
+      fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
       firebaseLogout().catch(() => {});
       localStorage.removeItem("nihongo_user");
       if (typeof document !== "undefined") {

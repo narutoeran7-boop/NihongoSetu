@@ -21,6 +21,7 @@ export interface StudentProfile {
     date: string;
   }[];
   notes?: Record<string, string>;
+  isDemo?: boolean;
 }
 
 export interface PrototypeState {
@@ -33,13 +34,13 @@ export interface PrototypeState {
 }
 
 export const DEFAULT_PROFILE: StudentProfile = {
-  name: "Japanese Learner",
+  name: "Sakura Tanaka",
   email: "student@nihongosetu.org",
   role: "student",
   targetLevel: "N5",
   nativeLanguage: "en",
-  streak: 1,
-  lastActive: "",
+  streak: 3,
+  lastActive: new Date().toISOString(),
   learnedKanji: ["日", "一", "国", "会", "人", "年", "大"],
   learnedVocab: ["わたし", "あなた", "にほんご", "せんせい", "がくせい", "はい", "いいえ"],
   mockScores: [
@@ -53,6 +54,39 @@ export const DEFAULT_PROFILE: StudentProfile = {
     },
   ],
   notes: {},
+  isDemo: false,
+};
+
+export const DEMO_PROFILE: StudentProfile = {
+  name: "Kenji Sato (Demo Student)",
+  email: "demo.student@nihongosetu.org",
+  role: "student",
+  targetLevel: "N5",
+  nativeLanguage: "en",
+  streak: 5,
+  lastActive: new Date().toISOString(),
+  learnedKanji: ["日", "一", "国", "会", "人", "年", "大", "十", "二", "本", "中", "長", "出", "三"],
+  learnedVocab: ["わたし", "あなた", "にほんご", "せんせい", "がくせい", "はい", "いいえ", "ありがとう", "おはよう", "さようなら"],
+  mockScores: [
+    {
+      level: "N5",
+      score: 19,
+      total: 20,
+      percentage: 95,
+      passed: true,
+      date: new Date(Date.now() - 86400000).toISOString(),
+    },
+    {
+      level: "N5",
+      score: 16,
+      total: 20,
+      percentage: 80,
+      passed: true,
+      date: new Date(Date.now() - 172800000).toISOString(),
+    },
+  ],
+  notes: {},
+  isDemo: true,
 };
 
 export function getStudentProfile(): StudentProfile {
@@ -64,7 +98,8 @@ export function getStudentProfile(): StudentProfile {
       return DEFAULT_PROFILE;
     }
     const parsed = JSON.parse(raw);
-    return { ...DEFAULT_PROFILE, ...parsed };
+    const base = parsed.isDemo || parsed.email?.includes("demo") ? DEMO_PROFILE : DEFAULT_PROFILE;
+    return { ...base, ...parsed };
   } catch {
     return DEFAULT_PROFILE;
   }
@@ -88,7 +123,12 @@ export function saveStudentProfile(profile: StudentProfile): void {
     });
     localStorage.setItem("ns", JSON.stringify(ns));
 
-    // Queue for background synchronization
+    // Demo accounts are strictly isolated: NEVER queue sync items to remote Firestore
+    if (profile.isDemo || profile.email === "demo.student@nihongosetu.org" || profile.email?.includes("demo")) {
+      return;
+    }
+
+    // Queue for background synchronization for registered users
     queueSyncItem("users", "update", profile.email || "student", {
       name: profile.name,
       targetLevel: profile.targetLevel,
@@ -179,8 +219,8 @@ export function saveMockExamResult(
 
   saveStudentProfile(profile);
 
-  // Secure sync queuing: only queue if server signature is attached
-  if (signature) {
+  // Secure sync queuing: only queue if server signature is attached and not a demo account
+  if (signature && !profile.isDemo && !profile.email?.includes("demo")) {
     queueSyncItem("mockScores", "create", `exam-${level}-${Date.now()}`, {
       level,
       score,

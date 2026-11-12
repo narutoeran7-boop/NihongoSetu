@@ -15,6 +15,7 @@ const SUITES = [
   { name: "JLPT Mock Exams & Parity", file: "src/lib/content/test-exams.ts" },
   { name: "Localization & Feature Naming", file: "src/lib/content/test-i18n.ts" },
   { name: "Universal Multilingual AI Sensei", file: "src/lib/sensei/test-multilingual.ts" },
+  { name: "Voice Activity Detection & Noise Suppression", file: "src/lib/sensei/test-vad.ts" },
 ];
 
 console.log("=================================================================");

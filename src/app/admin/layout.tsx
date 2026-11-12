@@ -48,6 +48,7 @@ export default function AdminLayout({
 
   const handleLogout = async () => {
     try {
+      await fetch("/api/auth/logout", { method: "POST" }).catch(() => {});
       await firebaseLogout().catch(() => {});
       localStorage.removeItem("nihongo_user");
       if (typeof document !== "undefined") {
@@ -56,7 +57,7 @@ export default function AdminLayout({
     } catch {
       // ignore
     }
-    router.push("/login");
+    window.location.href = "/login";
   };
 
   return (

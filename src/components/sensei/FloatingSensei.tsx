@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { useSensei } from "@/lib/sensei/SenseiContext";
 import { UNIVERSAL_LANGUAGES, UniversalLanguage, getLanguageByCode } from "@/lib/sensei/languages";
+import { isMeaningfulSpeech } from "@/lib/sensei/voiceActivityDetector";
 
 interface Message {
   id: string;
@@ -75,6 +76,9 @@ How can I help you right now?`,
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<any>(null);
+  const listeningTimeoutRef = useRef<any>(null);
+  const messagesRef = useRef<Message[]>(messages);
+  messagesRef.current = messages;
 
   // Auto-scroll message feed
   useEffect(() => {
@@ -91,7 +95,7 @@ How can I help you right now?`,
     }
   }, [preloadedPrompt, isFloatingOpen]);
 
-  // Setup Web Speech Recognition
+  // Setup Web Speech Recognition with anti-stuck watchdog and noise filtering
   useEffect(() => {
     if (typeof window !== "undefined") {
       const SpeechRecognition =
@@ -108,8 +112,12 @@ How can I help you right now?`,
         recognition.lang = langToUse;
 
         recognition.onresult = (event: any) => {
+          if (listeningTimeoutRef.current) {
+            clearTimeout(listeningTimeoutRef.current);
+            listeningTimeoutRef.current = null;
+          }
           const transcript = event.results[0]?.[0]?.transcript;
-          if (transcript) {
+          if (transcript && isMeaningfulSpeech(transcript)) {
             setInput(transcript);
             handleSend(transcript);
           }
@@ -117,22 +125,42 @@ How can I help you right now?`,
         };
 
         recognition.onerror = () => {
+          if (listeningTimeoutRef.current) {
+            clearTimeout(listeningTimeoutRef.current);
+            listeningTimeoutRef.current = null;
+          }
           setIsListening(false);
         };
 
         recognition.onend = () => {
+          if (listeningTimeoutRef.current) {
+            clearTimeout(listeningTimeoutRef.current);
+            listeningTimeoutRef.current = null;
+          }
           setIsListening(false);
         };
 
         recognitionRef.current = recognition;
       }
     }
+
+    return () => {
+      if (listeningTimeoutRef.current) {
+        clearTimeout(listeningTimeoutRef.current);
+      }
+    };
   }, [settings.inputLanguage, activeLanguage]);
 
   const toggleListening = () => {
     if (!recognitionRef.current) return;
     if (isListening) {
-      recognitionRef.current.stop();
+      if (listeningTimeoutRef.current) {
+        clearTimeout(listeningTimeoutRef.current);
+        listeningTimeoutRef.current = null;
+      }
+      try {
+        recognitionRef.current.stop();
+      } catch {}
       setIsListening(false);
     } else {
       try {
@@ -143,6 +171,17 @@ How can I help you right now?`,
         recognitionRef.current.lang = langToUse;
         recognitionRef.current.start();
         setIsListening(true);
+
+        // Anti-stuck safety watchdog: Auto abort if no speech resolved within 9 seconds
+        if (listeningTimeoutRef.current) clearTimeout(listeningTimeoutRef.current);
+        listeningTimeoutRef.current = setTimeout(() => {
+          if (recognitionRef.current) {
+            try {
+              recognitionRef.current.stop();
+            } catch {}
+          }
+          setIsListening(false);
+        }, 9000);
       } catch {
         setIsListening(false);
       }
@@ -151,7 +190,7 @@ How can I help you right now?`,
 
   const handleSend = async (customPrompt?: string) => {
     const textToSend = (customPrompt || input).trim();
-    if (!textToSend || isLoading) return;
+    if (!textToSend || !isMeaningfulSpeech(textToSend) || isLoading) return;
 
     const userMessage: Message = {
       id: `user-${Date.now()}`,
@@ -165,12 +204,18 @@ How can I help you right now?`,
     setIsLoading(true);
 
     try {
+      const currentHistory = messagesRef.current;
       const response = await fetch("/api/sensei", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: textToSend,
+          messages: [...currentHistory, userMessage].slice(-10).map((m) => ({
+            role: m.role === "user" ? "user" : "model",
+            content: m.content,
+          })),
           inputLanguage: settings.inputLanguage,
+          responseLanguage: settings.responseLanguage || settings.explanationLanguage,
           explanationLanguage: settings.explanationLanguage,
           conversationLanguage: settings.conversationLanguage,
           voiceOutputLanguage: settings.voiceOutputLanguage,
@@ -183,6 +228,12 @@ How can I help you right now?`,
       });
 
       const data = await response.json();
+      if (data.isExplicit && data.explanationLanguage) {
+        updateSettings({
+          responseLanguage: data.explanationLanguage,
+          explanationLanguage: data.explanationLanguage,
+        });
+      }
       const senseiReply = data.reply || "Sensei is reflecting on this. Please ask again.";
 
       const senseiMessage: Message = {
@@ -632,3 +683,4 @@ How can I help you right now?`,
     </>
   );
 }
+

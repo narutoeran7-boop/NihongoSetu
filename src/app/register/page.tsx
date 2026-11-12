@@ -104,36 +104,37 @@ export default function RegisterPage() {
       return;
     }
 
-    // Local / Offline fallback
-    setTimeout(() => {
-      try {
-        const newUser = {
-          name: fullName.trim() || "Japanese Learner",
+    // Local / Server fallback registration
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           email: email.trim(),
+          password,
+          name: fullName.trim(),
           role: "student",
           targetLevel,
           nativeLanguage,
-          createdAt: new Date().toISOString(),
-          streak: 1,
-          lastActive: new Date().toISOString(),
-          learnedKanji: 0,
-          learnedVocab: 0,
-          mockScores: [],
-        };
-        localStorage.setItem("nihongo_user", JSON.stringify(newUser));
-        if (typeof document !== "undefined") {
-          document.cookie = `nihongo_session=${encodeURIComponent(JSON.stringify({
-            name: newUser.name,
-            email: newUser.email,
-            role: "student",
-          }))}; path=/; SameSite=Lax; max-age=604800`;
-        }
-      } catch {
-        // ignore storage error
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok || !data.success) {
+        setError(data.error || "Registration failed. Please try again.");
+        setIsLoading(false);
+        return;
       }
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("nihongo_user", JSON.stringify(data.user));
+      }
+
+      window.location.href = data.redirect || "/portal";
+    } catch {
+      setError("Registration service unavailable. Please check your network connection.");
       setIsLoading(false);
-      router.push("/portal");
-    }, 400);
+    }
   };
 
   return (

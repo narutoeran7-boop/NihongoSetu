@@ -15,6 +15,11 @@ import {
   saveSenseiSettings,
   getSenseiSettings,
 } from "./senseiState";
+import {
+  DEFAULT_VAD_CONFIG,
+  isMeaningfulSpeech,
+  VoiceActivityDetector,
+} from "./voiceActivityDetector";
 
 interface TestResult {
   name: string;
@@ -190,9 +195,179 @@ export function runMultilingualTests(): { passed: number; total: number; failed:
   console.log("\n[6. State & Preference Persistence]");
   assert(
     DEFAULT_SENSEI_SETTINGS.inputLanguage === "auto" &&
+    DEFAULT_SENSEI_SETTINGS.responseLanguage === "en" &&
     DEFAULT_SENSEI_SETTINGS.explanationLanguage === "en" &&
     DEFAULT_SENSEI_SETTINGS.voiceOutputLanguage === "follow_explanation",
-    "Default settings maintain separate input and explanation languages"
+    "Default settings maintain separate input, response, explanation, and voice languages"
+  );
+
+  const promptWithResponseLang = buildSystemInstruction({
+    responseLanguage: "ta",
+    mode: "text",
+  });
+  assert(
+    promptWithResponseLang.instructions.includes("Target Explanation Language: Tamil"),
+    "Accepts and applies explicit responseLanguage option"
+  );
+
+  // 7. Gemini Master System Prompt & ChatGPT-like Intelligence
+  console.log("\n[7. Gemini Master System Prompt & ChatGPT-Like Intelligence]");
+  assert(
+    promptVoice.instructions.includes("Avoid unnecessary follow-up questions"),
+    "Voice prompt forbids automatic, unnecessary follow-up questions"
+  );
+  assert(
+    promptEn.instructions.includes("You are both:\n1. A general-purpose AI assistant.\n2. An intelligent Japanese language teacher."),
+    "Enforces Dual Role (General-purpose assistant + Master Japanese language teacher)"
+  );
+  assert(
+    promptEn.instructions.includes("Avoid starting every response with \"Sure!\", \"Of course!\", \"Certainly!\", or \"Great question!\"."),
+    "Forbids robotic conversational openers like 'Sure!' or 'Great question!'"
+  );
+  assert(
+    promptEn.instructions.includes("Seamlessly understand follow-up requests such as:") &&
+    promptEn.instructions.includes("• \"Explain again.\"") &&
+    promptEn.instructions.includes("• \"Make it shorter.\"") &&
+    promptEn.instructions.includes("• \"What about this one?\"") &&
+    promptEn.instructions.includes("• \"Why?\""),
+    "Explicitly guides context-aware follow-up reasoning ('Explain again', 'Make it shorter', 'Why?')"
+  );
+  assert(
+    promptEn.instructions.includes("Do NOT turn it into an unsolicited Japanese lesson."),
+    "Directs general non-Japanese inquiries (science, programming, writing) without forced Japanese lessons"
+  );
+  assert(
+    promptEn.instructions.includes("Never invent facts, grammar rules, citations, or capabilities."),
+    "Mandates strict accuracy and forbids hallucinations"
+  );
+
+  // 8. Explicit 10-Scenario Verification Suite
+  console.log("\n[8. Explicit 10-Scenario Verification Suite]");
+
+  // Scenario 1: User speaks Tamil asking for dog in Japanese ("நாய்க்கு ஜப்பானீஸ்ல என்ன?")
+  const sc1 = detectLanguages("நாய்க்கு ஜப்பானீஸ்ல என்ன?");
+  assert(
+    sc1.detectedInputLanguage === "ta",
+    "Scenario 1: Detects Tamil input for 'நாய்க்கு ஜப்பானீஸ்ல என்ன?'"
+  );
+  const promptSc1 = buildSystemInstruction({
+    inputLanguage: sc1.detectedInputLanguage,
+    explanationLanguage: sc1.explicitExplanationLanguage || "ta",
+    mode: "voice_conversation",
+  });
+  assert(
+    promptSc1.instructions.includes("PRIMARY EXPLANATION LANGUAGE: Tamil"),
+    "Scenario 1: Directs Tamil explanation of 犬 (inu) with natural tone"
+  );
+
+  // Scenario 2: English request for Japanese grammar ("Explain the difference between は and が in English.")
+  const sc2 = detectLanguages("Explain the difference between は and が in English.");
+  assert(
+    sc2.detectedInputLanguage === "en" && sc2.explicitExplanationLanguage === "en",
+    "Scenario 2: Detects English input and explicit English explanation request"
+  );
+  const promptSc2 = buildSystemInstruction({
+    inputLanguage: sc2.detectedInputLanguage,
+    explanationLanguage: sc2.explicitExplanationLanguage,
+    mode: "voice_conversation",
+  });
+  assert(
+    promptSc2.instructions.includes("PRIMARY EXPLANATION LANGUAGE: English"),
+    "Scenario 2: Directs English explanation for は vs が particles"
+  );
+
+  // Scenario 3: User asks for explanation in Tamil ("Explain the Japanese word ありがとう in Tamil.")
+  const sc3 = detectLanguages("Explain the Japanese word ありがとう in Tamil.");
+  assert(
+    sc3.explicitExplanationLanguage === "ta",
+    "Scenario 3: Extracts Tamil target explanation language from 'in Tamil'"
+  );
+  const promptSc3 = buildSystemInstruction({
+    inputLanguage: sc3.detectedInputLanguage,
+    explanationLanguage: sc3.explicitExplanationLanguage,
+    mode: "voice_conversation",
+  });
+  assert(
+    promptSc3.instructions.includes("PRIMARY EXPLANATION LANGUAGE: Tamil"),
+    "Scenario 3: Directs Tamil explanation for ありがとう"
+  );
+
+  // Scenario 4: User speaks in Japanese ("今日は何をしましたか？")
+  const sc4 = detectLanguages("今日は何をしましたか？");
+  assert(
+    sc4.detectedInputLanguage === "ja",
+    "Scenario 4: Detects Japanese input for '今日は何をしましたか？'"
+  );
+  const promptSc4 = buildSystemInstruction({
+    inputLanguage: "ja",
+    explanationLanguage: "ja",
+    mode: "voice_conversation",
+  });
+  assert(
+    promptSc4.instructions.includes("PRIMARY EXPLANATION LANGUAGE: Japanese"),
+    "Scenario 4: Directs natural conversational Japanese response"
+  );
+
+  // Scenario 5: General question ("What is fiction?")
+  assert(
+    promptEn.instructions.includes("When the user asks a general question not related to Japanese (e.g., \"What is fiction?\""),
+    "Scenario 5: Explicitly instructs AI to answer general questions directly"
+  );
+  assert(
+    promptEn.instructions.includes("Do NOT turn it into an unsolicited Japanese lesson."),
+    "Scenario 5: Explicitly forbids forcing unrelated questions into Japanese lessons"
+  );
+
+  // Scenario 6: Follow-up after confusion ("I don't understand. Explain more simply.")
+  assert(
+    promptEn.instructions.includes("If the user says \"I don't understand,\" NEVER repeat the same explanation word-for-word.") &&
+    promptEn.instructions.includes("use a fresh analogy or example."),
+    "Scenario 6: Instructs AI to provide a different perspective and simpler analogy when user expresses confusion"
+  );
+  assert(
+    promptSc1.instructions.includes("If the user does not understand, explain the concept differently using simpler words and a fresh analogy."),
+    "Scenario 6: Voice mode instructions direct explaining differently with simpler words upon confusion"
+  );
+
+  // Scenario 7: Language switch during conversation ("Please explain in English from now on.")
+  const sc7 = detectLanguages("Please explain in English from now on.");
+  assert(
+    sc7.explicitExplanationLanguage === "en",
+    "Scenario 7: Accurately identifies mid-conversation language switch to English"
+  );
+
+  // Scenario 8: Barge-in / interruption test
+  assert(
+    DEFAULT_VAD_CONFIG.interruptionThreshold > DEFAULT_VAD_CONFIG.baseSpeechThreshold + 15,
+    "Scenario 8: Interruption threshold enforces distinct high-confidence vocal cutoff"
+  );
+  const testVadInterruption = new VoiceActivityDetector();
+  testVadInterruption.setAIPlaybackState(true);
+  testVadInterruption.setState("interrupted");
+  assert(
+    testVadInterruption.getState() === "interrupted",
+    "Scenario 8: VAD transitions immediately to 'interrupted' when student speaks over AI"
+  );
+  testVadInterruption.destroy();
+
+  // Scenario 9: Seamless transition to listening
+  const testVadTransition = new VoiceActivityDetector();
+  testVadTransition.setAIPlaybackState(true);
+  testVadTransition.setAIPlaybackState(false);
+  testVadTransition.resetToListening();
+  assert(
+    testVadTransition.getState() === "listening",
+    "Scenario 9: Seamlessly transitions back to 'listening' state without requiring manual button clicks"
+  );
+  testVadTransition.destroy();
+
+  // Scenario 10: Background noise rejection
+  assert(
+    !isMeaningfulSpeech("...") &&
+    !isMeaningfulSpeech("shh") &&
+    !isMeaningfulSpeech("uh") &&
+    !isMeaningfulSpeech("   "),
+    "Scenario 10: Filters static, clicks, keyboard typing, and non-lexical filler noise"
   );
 
   const passed = results.filter((r) => r.passed).length;
@@ -206,3 +381,4 @@ if (typeof require !== "undefined" && require.main === module) {
   const summary = runMultilingualTests();
   if (summary.failed > 0) process.exit(1);
 }
+

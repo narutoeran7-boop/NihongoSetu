@@ -45,7 +45,7 @@ const TANGLISH_MARKERS = [
   "enna", "epdi", "eppadi", "engae", "edhukku", "edhuku", "pannunga", "pannu",
   "sollunga", "sollu", "solli", "purila", "puriyala", "purinjidhu", "vilakku",
   "vilakkavum", "indha", "andha", "vandhadhu", "varuma", "konjam", "nalla",
-  "romba", "difference", "venum", "koodadhu", "irukku", "irukkum"
+  "romba", "enna difference", "venum", "koodadhu", "irukku", "irukkum"
 ];
 
 // Common Filipino / Tagalog words
@@ -216,13 +216,28 @@ export function detectLanguages(rawPrompt: string): DetectionResult {
   }
   // 11. Japanese script check (Hiragana / Katakana)
   else if (/[\u3040-\u309F\u30A0-\u30FF]/.test(prompt)) {
-    detectedInputLanguage = "ja";
-    confidence = 0.98;
+    const latinChars = (prompt.match(/[a-zA-Z]/g) || []).length;
+    const jpChars = (prompt.match(/[\u3040-\u309F\u30A0-\u30FF]/g) || []).length;
+    if (latinChars > jpChars) {
+      // Latin sentence referencing isolated Japanese terms/kana
+      detectedInputLanguage = "en";
+      confidence = 0.88;
+    } else {
+      detectedInputLanguage = "ja";
+      confidence = 0.98;
+    }
   }
   // 12. Chinese CJK without Kana
   else if (/[\u4E00-\u9FFF]/.test(prompt)) {
-    detectedInputLanguage = "zh-CN";
-    confidence = 0.9;
+    const latinChars = (prompt.match(/[a-zA-Z]/g) || []).length;
+    const cjkChars = (prompt.match(/[\u4E00-\u9FFF]/g) || []).length;
+    if (latinChars > cjkChars) {
+      detectedInputLanguage = "en";
+      confidence = 0.88;
+    } else {
+      detectedInputLanguage = "zh-CN";
+      confidence = 0.9;
+    }
   }
 
   return {

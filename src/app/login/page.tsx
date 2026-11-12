@@ -2,15 +2,13 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { Lock, Mail, ArrowRight, ShieldCheck, UserCheck, Eye, EyeOff, Sparkles, Database } from "lucide-react";
+import { Lock, Mail, ArrowRight, ShieldCheck, UserCheck, Eye, EyeOff, Sparkles, AlertCircle, CheckCircle } from "lucide-react";
 import PublicNavbar from "@/components/public/Navbar";
 import PublicFooter from "@/components/public/Footer";
 import { firebaseLogin } from "@/lib/firebase/authService";
 import { isFirebaseConfigured } from "@/lib/firebase/config";
 
 export default function LoginPage() {
-  const router = useRouter();
   const [role, setRole] = useState<"student" | "admin">("student");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -18,84 +16,45 @@ export default function LoginPage() {
   const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setInfoMessage(null);
+
+    const trimmedEmail = (email || "").trim();
+    if (!trimmedEmail) {
+      setError("Please enter your email address.");
+      return;
+    }
+    if (!password) {
+      setError("Please enter your password.");
+      return;
+    }
+
     setIsLoading(true);
 
-    if (!email || !password) {
-      setError("Please enter both email address and password.");
-      setIsLoading(false);
-      return;
-    }
-
-    // When Firebase is configured and credentials are not default demo shortcuts, authenticate against Firebase Auth
-    if (isFirebaseConfigured() && !email.endsWith("@nihongosetu.org")) {
-      const res = await firebaseLogin(email, password);
-      if (!res.success) {
-        setError(res.error || "Authentication failed. Please check your credentials.");
-        setIsLoading(false);
-        return;
-      }
-
-      const logged = res.user!;
-      const sessionPayload = {
-        name: logged.displayName || email.split("@")[0],
-        email: logged.email,
-        role: logged.role,
-        targetLevel: "N5",
-        nativeLanguage: "en",
-        loggedInAt: new Date().toISOString(),
-      };
-
-      try {
-        localStorage.setItem("nihongo_user", JSON.stringify(sessionPayload));
-        if (typeof document !== "undefined") {
-          document.cookie = `nihongo_session=${encodeURIComponent(JSON.stringify(sessionPayload))}; path=/; SameSite=Lax; max-age=604800`;
+    try {
+      // 1. If Firebase is explicitly configured and not an internal demo address, attempt Firebase Auth
+      if (isFirebaseConfigured() && !trimmedEmail.endsWith("@nihongosetu.org")) {
+        const res = await firebaseLogin(trimmedEmail, password);
+        if (!res.success) {
+          setError(res.error || "Authentication failed. Please check your credentials.");
+          setIsLoading(false);
+          return;
         }
-      } catch {
-        // ignore storage error
-      }
 
-      setIsLoading(false);
-      if (logged.role === "admin") {
-        router.push("/admin");
-      } else {
-        router.push("/portal");
-      }
-      return;
-    }
-
-    // Local / Demo Account flow (instant login for development or offline testing)
-    setTimeout(() => {
-      if (role === "admin" || email.includes("admin")) {
+        const logged = res.user!;
         const sessionPayload = {
-          name: "Master Sensei / Administrator",
-          email: email,
-          role: "admin",
-          targetLevel: "N1",
-          nativeLanguage: "en",
-          loggedInAt: new Date().toISOString(),
-        };
-        try {
-          localStorage.setItem("nihongo_user", JSON.stringify(sessionPayload));
-          if (typeof document !== "undefined") {
-            document.cookie = `nihongo_session=${encodeURIComponent(JSON.stringify(sessionPayload))}; path=/; SameSite=Lax; max-age=604800`;
-          }
-        } catch {
-          // ignore storage error
-        }
-        router.push("/admin");
-      } else {
-        const sessionPayload = {
-          name: email.split("@")[0] || "Japanese Learner",
-          email: email,
-          role: "student",
+          name: logged.displayName || trimmedEmail.split("@")[0],
+          email: logged.email,
+          role: logged.role,
           targetLevel: "N5",
           nativeLanguage: "en",
           loggedInAt: new Date().toISOString(),
         };
+
         try {
           localStorage.setItem("nihongo_user", JSON.stringify(sessionPayload));
           if (typeof document !== "undefined") {
@@ -104,13 +63,84 @@ export default function LoginPage() {
         } catch {
           // ignore storage error
         }
-        router.push("/portal");
+
+        setIsLoading(false);
+        window.location.href = logged.role === "admin" ? "/admin" : "/portal";
+        return;
       }
+
+      // 2. Authenticate through the server-side API endpoint
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: trimmedEmail, password, role }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        setError(data.error || "Invalid email or password. Please verify your credentials.");
+        setIsLoading(false);
+        return;
+      }
+
+      // Persist session to local storage for immediate client state sync
+      if (typeof window !== "undefined") {
+        localStorage.setItem("nihongo_user", JSON.stringify(data.user));
+      }
+
+      setInfoMessage(`Authenticated as ${data.user?.name || "Student"}. Redirecting...`);
+
+      // Use full window navigation to guarantee the browser loads fresh server cookies
+      window.location.href = data.redirect || (role === "admin" ? "/admin" : "/portal");
+    } catch (err: unknown) {
+      const errMsg = err instanceof Error ? err.message : "Authentication service error. Please try again.";
+      setError(errMsg);
       setIsLoading(false);
-    }, 400);
+    }
   };
 
-  const handleQuickDemo = (demoType: "student" | "admin") => {
+  /**
+   * 1-Click Instant Demo Authentication
+   * Creates an active demo session immediately without requiring typing credentials or registration.
+   */
+  const handleInstantDemo = async (demoRole: "student" | "admin") => {
+    setError(null);
+    setInfoMessage(null);
+    setIsLoading(true);
+
+    try {
+      const res = await fetch("/api/auth/demo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role: demoRole }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        setError(data.error || "Failed to initialize demo session. Please try again.");
+        setIsLoading(false);
+        return;
+      }
+
+      if (typeof window !== "undefined") {
+        localStorage.setItem("nihongo_user", JSON.stringify(data.user));
+      }
+
+      setInfoMessage(`Entering Demo Mode as ${data.user?.name}...`);
+      window.location.href = data.redirect || (demoRole === "admin" ? "/admin" : "/portal");
+    } catch {
+      setError("Unable to connect to demo authentication service. Please check your network.");
+      setIsLoading(false);
+    }
+  };
+
+  /**
+   * Pre-fill the form inputs for manual credential testing
+   */
+  const handleFillCredentials = (demoType: "student" | "admin") => {
+    setError(null);
+    setInfoMessage(null);
     if (demoType === "admin") {
       setEmail("admin@nihongosetu.org");
       setPassword("Sensei@2026!Admin");
@@ -127,7 +157,7 @@ export default function LoginPage() {
       <PublicNavbar />
 
       <main className="flex-1 flex items-center justify-center px-4 sm:px-6 lg:px-8 py-12">
-        <div className="w-full max-w-md space-y-8">
+        <div className="w-full max-w-md space-y-6">
           {/* Header */}
           <div className="text-center space-y-2">
             <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-[#C83C50] text-[#FFFFFF] shadow-xl shadow-[#C83C50]/20 font-bold text-2xl mb-2">
@@ -138,7 +168,7 @@ export default function LoginPage() {
             </h1>
             <p className="text-sm text-[#E8E0D5]/70">
               {role === "admin"
-                ? "Enter institutional administrator credentials"
+                ? "Sign in to administrator command center"
                 : "Sign in to access your JLPT learning studio & streak tracker"}
             </p>
           </div>
@@ -147,7 +177,10 @@ export default function LoginPage() {
           <div className="bg-[#101C35] p-1.5 rounded-xl border border-[#E8E0D5]/20 flex items-center">
             <button
               type="button"
-              onClick={() => setRole("student")}
+              onClick={() => {
+                setRole("student");
+                setError(null);
+              }}
               className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center space-x-2 transition-all ${
                 role === "student"
                   ? "bg-[#C83C50] text-[#FFFFFF] shadow"
@@ -159,7 +192,10 @@ export default function LoginPage() {
             </button>
             <button
               type="button"
-              onClick={() => setRole("admin")}
+              onClick={() => {
+                setRole("admin");
+                setError(null);
+              }}
               className={`flex-1 py-2 px-3 rounded-lg text-xs font-semibold flex items-center justify-center space-x-2 transition-all ${
                 role === "admin"
                   ? "bg-[#C83C50] text-[#FFFFFF] shadow"
@@ -171,36 +207,77 @@ export default function LoginPage() {
             </button>
           </div>
 
-          {/* Quick Demo Pre-fill Bar */}
-          <div className="p-3 rounded-xl bg-[#E8E0D5]/5 border border-[#E8E0D5]/15 flex items-center justify-between text-xs">
-            <span className="text-[#E8E0D5]/80 flex items-center space-x-1.5">
-              <Sparkles className="w-3.5 h-3.5 text-[#C83C50]" />
-              <span>Instant Access:</span>
-            </span>
-            <div className="flex items-center space-x-2">
+          {/* 1-Click Instant Demo Access Box */}
+          <div className="p-4 rounded-2xl bg-[#E8E0D5]/5 border border-[#E8E0D5]/15 space-y-3">
+            <div className="flex items-center justify-between text-xs">
+              <span className="text-[#E8E0D5] font-semibold flex items-center space-x-2">
+                <Sparkles className="w-4 h-4 text-[#C83C50]" />
+                <span>1-Click Instant Demo (No Registration)</span>
+              </span>
+              <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                Ready
+              </span>
+            </div>
+            <div className="grid grid-cols-2 gap-2.5">
               <button
                 type="button"
-                onClick={() => handleQuickDemo("student")}
-                className="px-2.5 py-1 rounded bg-[#E8E0D5]/10 hover:bg-[#E8E0D5]/20 text-[#E8E0D5] font-medium transition-colors"
+                id="btn-student-demo"
+                onClick={() => handleInstantDemo("student")}
+                disabled={isLoading}
+                className="py-2.5 px-3 rounded-xl bg-gradient-to-r from-[#C83C50] to-[#E05A47] hover:from-[#b53547] hover:to-[#ce4f3d] text-white font-bold text-xs shadow-md shadow-[#C83C50]/20 flex items-center justify-center space-x-1.5 transition-all disabled:opacity-50"
               >
-                Student Demo
+                <UserCheck className="w-3.5 h-3.5" />
+                <span>Student Demo</span>
               </button>
               <button
                 type="button"
-                onClick={() => handleQuickDemo("admin")}
-                className="px-2.5 py-1 rounded bg-[#E8E0D5]/10 hover:bg-[#E8E0D5]/20 text-[#E8E0D5] font-medium transition-colors"
+                id="btn-admin-demo"
+                onClick={() => handleInstantDemo("admin")}
+                disabled={isLoading}
+                className="py-2.5 px-3 rounded-xl bg-[#E8E0D5]/10 hover:bg-[#E8E0D5]/20 text-[#E8E0D5] font-semibold text-xs border border-[#E8E0D5]/20 flex items-center justify-center space-x-1.5 transition-all disabled:opacity-50"
               >
-                Admin Demo
+                <ShieldCheck className="w-3.5 h-3.5" />
+                <span>Admin Demo</span>
               </button>
+            </div>
+            <div className="flex items-center justify-between pt-1 text-[11px] text-[#E8E0D5]/60 border-t border-[#E8E0D5]/10">
+              <span>Or pre-fill form credentials:</span>
+              <div className="space-x-2">
+                <button
+                  type="button"
+                  onClick={() => handleFillCredentials("student")}
+                  className="text-emerald-400 hover:underline font-medium"
+                >
+                  Fill Student
+                </button>
+                <span>•</span>
+                <button
+                  type="button"
+                  onClick={() => handleFillCredentials("admin")}
+                  className="text-amber-400 hover:underline font-medium"
+                >
+                  Fill Admin
+                </button>
+              </div>
             </div>
           </div>
 
           {/* Form */}
           <div className="bg-[#101C35] border border-[#E8E0D5]/20 rounded-2xl p-6 sm:p-8 shadow-2xl space-y-6">
             {error && (
-              <div className="p-3.5 rounded-xl bg-[#C83C50]/15 border border-[#C83C50]/40 text-xs text-[#FFFFFF] flex items-center space-x-2">
-                <span className="w-2 h-2 rounded-full bg-[#C83C50]" />
+              <div
+                id="login-error-banner"
+                className="p-3.5 rounded-xl bg-[#C83C50]/15 border border-[#C83C50]/40 text-xs text-[#FFFFFF] flex items-center space-x-2.5"
+              >
+                <AlertCircle className="w-4 h-4 text-[#C83C50] shrink-0" />
                 <span>{error}</span>
+              </div>
+            )}
+
+            {infoMessage && (
+              <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-xs text-[#FFFFFF] flex items-center space-x-2.5">
+                <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                <span>{infoMessage}</span>
               </div>
             )}
 
@@ -213,10 +290,10 @@ export default function LoginPage() {
                   <Mail className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#E8E0D5]/50" />
                   <input
                     type="email"
-                    required
+                    id="input-email"
                     value={email}
                     onChange={(e) => setEmail(e.target.value)}
-                    placeholder={role === "admin" ? "admin@nihongosetu.org" : "student@example.com"}
+                    placeholder={role === "admin" ? "admin@nihongosetu.org" : "student@nihongosetu.org"}
                     className="w-full bg-[#101C35] border border-[#E8E0D5]/25 rounded-xl pl-10 pr-4 py-2.5 text-sm text-[#FFFFFF] placeholder-[#E8E0D5]/40 focus:outline-none focus:border-[#C83C50] focus:ring-1 focus:ring-[#C83C50] transition-colors"
                   />
                 </div>
@@ -238,7 +315,7 @@ export default function LoginPage() {
                   <Lock className="w-4 h-4 absolute left-3.5 top-1/2 -translate-y-1/2 text-[#E8E0D5]/50" />
                   <input
                     type={showPassword ? "text" : "password"}
-                    required
+                    id="input-password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     placeholder="••••••••••••"
@@ -268,10 +345,17 @@ export default function LoginPage() {
 
               <button
                 type="submit"
+                id="btn-login-submit"
                 disabled={isLoading}
                 className="w-full py-3 px-4 rounded-xl bg-[#C83C50] text-[#FFFFFF] font-semibold text-sm shadow-lg shadow-[#C83C50]/25 hover:bg-[#C83C50]/90 transition-all flex items-center justify-center space-x-2 disabled:opacity-50"
               >
-                <span>{isLoading ? "Authenticating..." : role === "admin" ? "Access Admin Command" : "Enter Learning Portal"}</span>
+                <span>
+                  {isLoading
+                    ? "Authenticating..."
+                    : role === "admin"
+                    ? "Access Admin Command"
+                    : "Enter Learning Portal"}
+                </span>
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>

@@ -33,6 +33,7 @@ import {
 import { getStudentProfile, DEFAULT_PROFILE, StudentProfile } from "@/lib/storage/studentState";
 import { useSensei } from "@/lib/sensei/SenseiContext";
 import { UNIVERSAL_LANGUAGES, getLanguageByCode } from "@/lib/sensei/languages";
+import { VoiceActivityDetector, VADState, isMeaningfulSpeech } from "@/lib/sensei/voiceActivityDetector";
 
 interface ChatMessage {
   id: string;
@@ -42,7 +43,15 @@ interface ChatMessage {
   source?: "gemini" | "fallback";
 }
 
-type VoiceState = "idle" | "listening" | "thinking" | "speaking" | "interrupted" | "error";
+type VoiceState =
+  | "idle"
+  | "listening"
+  | "speech_detected"
+  | "processing"
+  | "speaking"
+  | "no_speech_detected"
+  | "interrupted"
+  | "error";
 
 const SPEECH_LANGUAGES = [
   { code: "ja-JP", label: "Japanese (日本語)", flag: "🇯🇵" },
@@ -208,21 +217,42 @@ export default function AISenseiPage() {
   const [liveUserTranscript, setLiveUserTranscript] = useState("");
   const [liveSenseiTranscript, setLiveSenseiTranscript] = useState("");
 
-  // Refs for Web Speech & Web Audio APIs
+  // VAD & Web Speech Refs
   const recognitionRef = useRef<any>(null);
-  const audioContextRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const micStreamRef = useRef<MediaStream | null>(null);
-  const animationFrameRef = useRef<number | null>(null);
+  const vadRef = useRef<VoiceActivityDetector | null>(null);
+  const interimTranscriptRef = useRef<string>("");
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+
+  // Conversational Concurrency & Stale Closure Prevention Refs
+  const messagesRef = useRef<ChatMessage[]>(INITIAL_MESSAGES);
+  messagesRef.current = messages;
+  const processVoiceTurnRef = useRef<(text: string) => Promise<void>>(null as any);
+  const isProcessingTurnRef = useRef(false);
+
+  // SpeechSynthesis Garbage Collection & Watchdog Protection
+  const activeUtteranceRef = useRef<SpeechSynthesisUtterance | null>(null);
+  const speechWatchdogRef = useRef<any>(null);
+  const speechKeepAliveIntervalRef = useRef<any>(null);
 
   // Text-To-Speech Playback State for Text Mode
   const [speakingMsgId, setSpeakingMsgId] = useState<string | null>(null);
   const [isPaused, setIsPaused] = useState(false);
+  const [availableVoices, setAvailableVoices] = useState<SpeechSynthesisVoice[]>([]);
 
   useEffect(() => {
     // Hydration-safe initial profile sync
     setStudentProfile(getStudentProfile());
+
+    if (typeof window !== "undefined" && "speechSynthesis" in window) {
+      const loadVoices = () => {
+        const v = window.speechSynthesis.getVoices();
+        if (v && v.length > 0) {
+          setAvailableVoices(v);
+        }
+      };
+      loadVoices();
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
   }, []);
 
   useEffect(() => {
@@ -237,6 +267,19 @@ export default function AISenseiPage() {
   }, []);
 
   const stopAllAudio = useCallback(() => {
+    if (speechWatchdogRef.current) {
+      clearTimeout(speechWatchdogRef.current);
+      speechWatchdogRef.current = null;
+    }
+    if (speechKeepAliveIntervalRef.current) {
+      clearInterval(speechKeepAliveIntervalRef.current);
+      speechKeepAliveIntervalRef.current = null;
+    }
+    activeUtteranceRef.current = null;
+    if (typeof window !== "undefined") {
+      (window as any).__senseiActiveUtterance = null;
+    }
+
     if (recognitionRef.current) {
       try {
         recognitionRef.current.abort();
@@ -248,198 +291,286 @@ export default function AISenseiPage() {
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
-    if (animationFrameRef.current) {
-      cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
+    if (vadRef.current) {
+      vadRef.current.destroy();
+      vadRef.current = null;
     }
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach((track) => track.stop());
-      micStreamRef.current = null;
-    }
-    if (audioContextRef.current && audioContextRef.current.state !== "closed") {
-      audioContextRef.current.close().catch(() => {});
-      audioContextRef.current = null;
-    }
+    interimTranscriptRef.current = "";
+    isProcessingTurnRef.current = false;
     setSpeakingMsgId(null);
     setIsPaused(false);
   }, []);
 
   // --------------------------------------------------------------------------
-  // Web Audio Visualizer & Real-Time Audio Energy Processing
+  // --------------------------------------------------------------------------
+  // VAD & Web Audio Visualizer Setup
   // --------------------------------------------------------------------------
   const setupAudioAnalyser = async (): Promise<boolean> => {
-    try {
-      if (typeof window === "undefined" || !navigator.mediaDevices?.getUserMedia) {
-        return false;
-      }
-
-      if (micStreamRef.current && audioContextRef.current) {
-        return true;
-      }
-
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      micStreamRef.current = stream;
-
-      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
-      const audioCtx = new AudioCtx();
-      audioContextRef.current = audioCtx;
-
-      const source = audioCtx.createMediaStreamSource(stream);
-      const analyser = audioCtx.createAnalyser();
-      analyser.fftSize = 64;
-      analyser.smoothingTimeConstant = 0.8;
-      source.connect(analyser);
-      analyserRef.current = analyser;
-
-      startCanvasVisualization();
+    if (vadRef.current) {
       return true;
-    } catch (err: any) {
-      setRecognitionError(
-        err.name === "NotAllowedError" || err.name === "PermissionDeniedError"
-          ? "Microphone access was denied. Please allow microphone permissions in your browser bar."
-          : "Could not access microphone."
-      );
-      return false;
     }
-  };
 
-  const startCanvasVisualization = () => {
-    if (!canvasRef.current || !analyserRef.current) return;
-    const canvas = canvasRef.current;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return;
-    const analyser = analyserRef.current;
-    const bufferLength = analyser.frequencyBinCount;
-    const dataArray = new Uint8Array(bufferLength);
+    const vad = new VoiceActivityDetector({
+      minSpeechDurationMs: 220,
+      silenceTurnTimeoutMs: 1100,
+      noiseSensitivityMargin: 14,
+      baseSpeechThreshold: 22,
+      interruptionThreshold: 48,
+    });
 
-    const render = () => {
-      animationFrameRef.current = requestAnimationFrame(render);
-      analyser.getByteFrequencyData(dataArray);
+    vad.onStateChange = (state) => {
+      setVoiceState(state);
+    };
 
-      // Calculate audio energy for Voice Activity Detection
-      let sum = 0;
-      for (let i = 0; i < bufferLength; i++) {
-        sum += dataArray[i];
-      }
-      const averageVolume = sum / bufferLength;
+    vad.onVolumeUpdate = (stats) => {
+      drawCanvasVisualization(stats.frequencyData, stats.volume);
+    };
 
-      // Natural Interruption (Barge-in):
-      // If user speaks loud enough while Sensei is currently speaking, immediately interrupt Sensei!
-      if (voiceStateRef.current === "speaking" && averageVolume > 38 && !isMutedRef.current) {
-        triggerInterruption();
-      }
-
-      // Draw dynamic reactive waveform
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const barWidth = (canvas.width / bufferLength) * 1.8;
-      let x = 0;
-
-      for (let i = 0; i < bufferLength; i++) {
-        const v = dataArray[i] / 255;
-        const barHeight = Math.max(4, v * canvas.height * 0.9);
-
-        // Color based on active state
-        let barColor = "#C83C50";
-        if (voiceStateRef.current === "listening") barColor = "#38BDF8"; // Cyan/sky blue
-        if (voiceStateRef.current === "speaking") barColor = "#E11D48"; // Rose crimson
-        if (voiceStateRef.current === "thinking") barColor = "#F59E0B"; // Amber
-
-        ctx.fillStyle = barColor;
-        ctx.beginPath();
-        ctx.roundRect(x, (canvas.height - barHeight) / 2, barWidth - 2, barHeight, 4);
-        ctx.fill();
-
-        x += barWidth;
+    vad.onTurnComplete = () => {
+      // Auto-commit speech turn when silence is sustained after valid speech
+      const speech = interimTranscriptRef.current.trim();
+      if (speech && isMeaningfulSpeech(speech)) {
+        if (recognitionRef.current) {
+          try {
+            recognitionRef.current.stop();
+          } catch {}
+        }
+        processVoiceTurnRef.current?.(speech);
+      } else {
+        // Discard non-speech noise and resume listening
+        interimTranscriptRef.current = "";
+        vad.resetToListening();
       }
     };
 
-    render();
+    vad.onInterruptionTriggered = () => {
+      const speech = interimTranscriptRef.current.trim();
+      if (speech && isMeaningfulSpeech(speech) && speech.length >= 3) {
+        triggerInterruption();
+      }
+    };
+
+    const ready = await vad.initializeStream();
+    if (!ready) {
+      setRecognitionError(
+        "Microphone access with studio noise suppression was denied or unavailable."
+      );
+      return false;
+    }
+
+    vadRef.current = vad;
+    return true;
+  };
+
+  const drawCanvasVisualization = (dataArray: Uint8Array, volume: number) => {
+    if (!canvasRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const bufferLength = dataArray.length;
+    const barWidth = (canvas.width / bufferLength) * 1.8;
+    let x = 0;
+
+    let barColor = "#38BDF8"; // Sky blue (listening)
+    if (voiceStateRef.current === "speech_detected") barColor = "#10B981"; // Emerald green (speech detected)
+    if (voiceStateRef.current === "processing") barColor = "#F59E0B"; // Amber (processing)
+    if (voiceStateRef.current === "speaking") barColor = "#E11D48"; // Crimson (Sensei speaking)
+    if (voiceStateRef.current === "interrupted") barColor = "#EAB308"; // Gold (interrupted)
+    if (voiceStateRef.current === "error") barColor = "#EF4444"; // Red (error)
+
+    for (let i = 0; i < bufferLength; i++) {
+      const v = dataArray[i] / 255;
+      const barHeight = Math.max(4, v * canvas.height * 0.9);
+      ctx.fillStyle = barColor;
+      ctx.beginPath();
+      ctx.roundRect(x, (canvas.height - barHeight) / 2, barWidth - 2, barHeight, 4);
+      ctx.fill();
+      x += barWidth;
+    }
   };
 
   // --------------------------------------------------------------------------
   // Natural Interruption Handler (Barge-In)
   // --------------------------------------------------------------------------
   const triggerInterruption = useCallback(() => {
+    if (speechWatchdogRef.current) {
+      clearTimeout(speechWatchdogRef.current);
+      speechWatchdogRef.current = null;
+    }
+    if (speechKeepAliveIntervalRef.current) {
+      clearInterval(speechKeepAliveIntervalRef.current);
+      speechKeepAliveIntervalRef.current = null;
+    }
+    activeUtteranceRef.current = null;
+    if (typeof window !== "undefined") {
+      (window as any).__senseiActiveUtterance = null;
+    }
+
     if (typeof window !== "undefined" && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
     }
+    vadRef.current?.setAIPlaybackState(false);
+    isProcessingTurnRef.current = false;
     setVoiceState("interrupted");
+    vadRef.current?.setState("interrupted");
     setLiveSenseiTranscript("Sensei: (Interrupted) Listening to you...");
 
     // Smoothly resume listening to the student
     setTimeout(() => {
       if (studioMode === "voice") {
         setVoiceState("listening");
+        vadRef.current?.resetToListening();
         startSpeechRecognition();
       }
     }, 250);
   }, [studioMode]);
 
   // --------------------------------------------------------------------------
-  // Voice Output (Speech Synthesis) Engine
+  // Voice Output (Speech Synthesis) Engine with Watchdog & GC Protection
   // --------------------------------------------------------------------------
   const speakSenseiResponse = useCallback(
     (text: string, onFinish?: () => void) => {
       if (typeof window === "undefined" || !("speechSynthesis" in window)) {
+        isProcessingTurnRef.current = false;
         if (onFinish) onFinish();
         return;
       }
 
+      // Clear any prior speech & watchdog
       window.speechSynthesis.cancel();
-      const cleaned = cleanMarkdownForSpeech(text);
-      if (!cleaned) {
+      if (speechWatchdogRef.current) {
+        clearTimeout(speechWatchdogRef.current);
+        speechWatchdogRef.current = null;
+      }
+      if (speechKeepAliveIntervalRef.current) {
+        clearInterval(speechKeepAliveIntervalRef.current);
+        speechKeepAliveIntervalRef.current = null;
+      }
+
+      // Clean and guard text length for speech
+      const cleaned = cleanMarkdownForSpeech(text).slice(0, 500);
+      if (!cleaned || settings.voiceOutputLanguage === "none") {
+        isProcessingTurnRef.current = false;
+        if (voiceStateRef.current === "speaking" || voiceStateRef.current === "processing") {
+          setVoiceState("listening");
+          vadRef.current?.resetToListening();
+        }
         if (onFinish) onFinish();
         return;
       }
 
       const utterance = new SpeechSynthesisUtterance(cleaned);
+      activeUtteranceRef.current = utterance;
+      if (typeof window !== "undefined") {
+        (window as any).__senseiActiveUtterance = utterance; // Prevent browser GC collection mid-speech
+      }
       utterance.rate = speechRate;
 
       // Determine speech synthesis language from multilingual settings
-      const targetVoiceLangCode =
-        settings.voiceOutputLanguage === "follow_explanation"
-          ? settings.explanationLanguage
-          : settings.voiceOutputLanguage === "follow_conversation"
-          ? (settings.conversationLanguage === "auto" ? settings.explanationLanguage : settings.conversationLanguage)
-          : settings.voiceOutputLanguage;
+      let targetVoiceLangCode = settings.voiceOutputLanguage;
+      if (
+        !targetVoiceLangCode ||
+        targetVoiceLangCode === "follow_response" ||
+        targetVoiceLangCode === "follow_explanation"
+      ) {
+        targetVoiceLangCode = settings.responseLanguage || settings.explanationLanguage || "en";
+      } else if (targetVoiceLangCode === "follow_conversation") {
+        targetVoiceLangCode =
+          settings.conversationLanguage === "auto"
+            ? settings.responseLanguage || settings.explanationLanguage || "en"
+            : settings.conversationLanguage;
+      }
 
       const langInfo = getLanguageByCode(targetVoiceLangCode);
       const targetSpeechCode = langInfo?.speechCode || "en-US";
       utterance.lang = targetSpeechCode;
 
       const voices = window.speechSynthesis.getVoices();
-      const matchedVoice = voices.find(
-        (v) =>
-          v.lang === targetSpeechCode ||
-          v.lang.startsWith(targetVoiceLangCode) ||
-          (langInfo?.alternateSpeechCodes && langInfo.alternateSpeechCodes.includes(v.lang))
-      );
+      let matchedVoice: SpeechSynthesisVoice | undefined;
+
+      // 1. If user explicitly selected a voice by name, use it
+      if (settings.voiceName && settings.voiceName !== "default") {
+        matchedVoice = voices.find((v) => v.name === settings.voiceName);
+      }
+
+      // 2. Otherwise match by targetSpeechCode / targetVoiceLangCode
+      if (!matchedVoice) {
+        matchedVoice = voices.find(
+          (v) =>
+            v.lang === targetSpeechCode ||
+            v.lang.toLowerCase() === targetSpeechCode.toLowerCase() ||
+            v.lang.startsWith(targetVoiceLangCode) ||
+            (langInfo?.alternateSpeechCodes && langInfo.alternateSpeechCodes.includes(v.lang))
+        );
+      }
       if (matchedVoice) {
         utterance.voice = matchedVoice;
       }
 
+      let finalized = false;
+      const finalizeSpeech = () => {
+        if (finalized) return;
+        finalized = true;
+
+        if (speechWatchdogRef.current) {
+          clearTimeout(speechWatchdogRef.current);
+          speechWatchdogRef.current = null;
+        }
+        if (speechKeepAliveIntervalRef.current) {
+          clearInterval(speechKeepAliveIntervalRef.current);
+          speechKeepAliveIntervalRef.current = null;
+        }
+
+        activeUtteranceRef.current = null;
+        if (typeof window !== "undefined") {
+          (window as any).__senseiActiveUtterance = null;
+        }
+        vadRef.current?.setAIPlaybackState(false);
+        isProcessingTurnRef.current = false;
+
+        if (studioMode === "voice") {
+          setVoiceState("listening");
+          vadRef.current?.resetToListening();
+          startSpeechRecognition();
+        } else {
+          setVoiceState("idle");
+        }
+
+        if (onFinish) onFinish();
+      };
+
       utterance.onstart = () => {
         setVoiceState("speaking");
+        vadRef.current?.setAIPlaybackState(true);
         setLiveSenseiTranscript(text);
+
+        // Keepalive interval for Chrome to prevent silent speech engine stall
+        speechKeepAliveIntervalRef.current = setInterval(() => {
+          if (typeof window !== "undefined" && window.speechSynthesis.speaking && window.speechSynthesis.paused) {
+            window.speechSynthesis.resume();
+          }
+        }, 350);
       };
 
       utterance.onend = () => {
-        if (voiceStateRef.current === "speaking") {
-          setVoiceState("listening");
-        }
-        if (onFinish) onFinish();
+        finalizeSpeech();
       };
 
       utterance.onerror = () => {
-        if (voiceStateRef.current === "speaking") {
-          setVoiceState("listening");
-        }
-        if (onFinish) onFinish();
+        finalizeSpeech();
       };
+
+      // Active watchdog: guarantees that speech will never stay stuck in SPEAKING state
+      const estimatedDurationMs = Math.max(3500, Math.ceil(cleaned.length * 85));
+      speechWatchdogRef.current = setTimeout(() => {
+        finalizeSpeech();
+      }, estimatedDurationMs + 3000);
 
       window.speechSynthesis.speak(utterance);
     },
-    [speechRate]
+    [speechRate, settings, studioMode]
   );
 
   // --------------------------------------------------------------------------
@@ -479,6 +610,7 @@ export default function AISenseiPage() {
 
       recognition.onstart = () => {
         setVoiceState("listening");
+        vadRef.current?.setState("listening");
       };
 
       recognition.onresult = (event: any) => {
@@ -487,23 +619,35 @@ export default function AISenseiPage() {
           transcript += event.results[i][0].transcript;
         }
 
-        setLiveUserTranscript(transcript);
+        const trimmed = transcript.trim();
+        interimTranscriptRef.current = trimmed;
+        setLiveUserTranscript(trimmed);
 
-        // Natural interruption: if Sensei was speaking, talking immediately interrupts
-        if (voiceStateRef.current === "speaking") {
+        // Meaningful Interruption: Only interrupt Sensei if student actually speaks meaningful words (>= 3 chars)
+        if (voiceStateRef.current === "speaking" && isMeaningfulSpeech(trimmed) && trimmed.length >= 3) {
           triggerInterruption();
         }
 
-        // When speech turn is finalized, process conversational turn
-        if (event.results[0]?.isFinal && transcript.trim()) {
-          recognition.stop();
-          processVoiceTurn(transcript.trim());
+        // When speech turn is finalized by native speech recognizer
+        if (event.results[0]?.isFinal && trimmed) {
+          if (isMeaningfulSpeech(trimmed)) {
+            vadRef.current?.handleSpeechRecognitionFinal();
+            try {
+              recognition.stop();
+            } catch {}
+            processVoiceTurnRef.current?.(trimmed);
+          } else {
+            // Discard noise hallucination (such as single period or click)
+            interimTranscriptRef.current = "";
+            setLiveUserTranscript("");
+            vadRef.current?.resetToListening();
+          }
         }
       };
 
       recognition.onerror = (event: any) => {
         if (event.error === "no-speech") {
-          // Restart listening seamlessly if still in live voice mode
+          // Restart listening seamlessly if still in live voice mode without getting stuck
           if (studioMode === "voice" && voiceStateRef.current === "listening" && !isMutedRef.current) {
             setTimeout(() => {
               if (voiceStateRef.current === "listening") startSpeechRecognition();
@@ -529,15 +673,54 @@ export default function AISenseiPage() {
     } catch {
       // fallback
     }
-  }, [speechLang, studioMode, triggerInterruption]);
+  }, [speechLang, studioMode, triggerInterruption, settings, activeLanguage]);
 
   // --------------------------------------------------------------------------
-  // Conversational Spoken Turn Processor
+  // Welcome Greeting Helper (Bilingual Spoken Greeting)
+  // --------------------------------------------------------------------------
+  const getWelcomeGreeting = useCallback((code: string) => {
+    switch (code) {
+      case "ta":
+        return "வணக்கம்! நான் உங்கள் ஜப்பானிய AI ஆசிரியர். இன்று என்ன பயிற்சி செய்யலாம்?";
+      case "ja":
+        return "こんにちは！日本語節のAI先生です。今日はどんな日本語について話しましょうか？";
+      case "fr":
+        return "Bonjour ! Je suis votre Sensei de japonais. Quel point souhaitez-vous pratiquer aujourd'hui ?";
+      case "es":
+        return "¡Hola! Soy tu Sensei de japonés. ¿Qué te gustaría practicar hoy?";
+      case "de":
+        return "Guten Tag! Ich bin Ihr Japanisch-Sensei. Was möchten Sie heute üben?";
+      case "hi":
+        return "नमस्ते! मैं आपका जापानी शिक्षक हूँ। आज आप क्या सीखना चाहेंगे?";
+      case "fil":
+        return "Kamusta! Ako ang iyong AI Sensei sa Nihongo. Anong aralin ang gusto mong sanayin ngayon?";
+      case "ru":
+        return "Здравствуйте! Я ваш преподаватель японского языка. Что вы хотите разобрать сегодня?";
+      case "ar":
+        return "مرحباً! أنا معلمك للغة اليابانية. ما الذي تود ممارسته اليوم؟";
+      default:
+        return "Hello! I am Nihongo AI Sensei. What Japanese concept or phrase would you like to practice today?";
+    }
+  }, []);
+
+  // --------------------------------------------------------------------------
+  // Conversational Spoken Turn Processor with Noise Filtering & Stale-Closure Guard
   // --------------------------------------------------------------------------
   const processVoiceTurn = async (spokenText: string) => {
-    if (!spokenText.trim()) return;
+    if (!spokenText.trim() || !isMeaningfulSpeech(spokenText)) {
+      vadRef.current?.resetToListening();
+      setVoiceState("listening");
+      return;
+    }
 
-    setVoiceState("thinking");
+    if (isProcessingTurnRef.current) {
+      return;
+    }
+    isProcessingTurnRef.current = true;
+
+    setVoiceState("processing");
+    vadRef.current?.setState("processing");
+    interimTranscriptRef.current = "";
     setLiveUserTranscript(spokenText);
 
     counterRef.current += 1;
@@ -551,13 +734,19 @@ export default function AISenseiPage() {
 
     try {
       const profile = getStudentProfile();
+      const currentHistory = messagesRef.current;
       const response = await fetch("/api/sensei", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: spokenText,
+          messages: [...currentHistory, userMsg].slice(-10).map((m) => ({
+            role: m.sender === "user" ? "user" : "model",
+            content: m.text,
+          })),
           mode: "voice_conversation",
           inputLanguage: settings.inputLanguage,
+          responseLanguage: settings.responseLanguage || settings.explanationLanguage,
           explanationLanguage: settings.explanationLanguage,
           conversationLanguage: settings.conversationLanguage,
           voiceOutputLanguage: settings.voiceOutputLanguage,
@@ -576,6 +765,14 @@ export default function AISenseiPage() {
       if (response.ok) {
         const data = await response.json();
         if (data.reply) {
+          // If Gemini recognized an explicit language switch in speech ("Explain in English", etc.), update client settings
+          if (data.isExplicit && data.explanationLanguage) {
+            updateSettings({
+              responseLanguage: data.explanationLanguage,
+              explanationLanguage: data.explanationLanguage,
+            });
+          }
+
           counterRef.current += 1;
           const senseiMsgId = `s-${counterRef.current}`;
           const senseiMsg: ChatMessage = {
@@ -591,6 +788,7 @@ export default function AISenseiPage() {
           speakSenseiResponse(data.reply, () => {
             if (studioMode === "voice" && !isMutedRef.current) {
               setVoiceState("listening");
+              vadRef.current?.resetToListening();
               startSpeechRecognition();
             }
           });
@@ -602,7 +800,7 @@ export default function AISenseiPage() {
     }
 
     // Offline Voice Fallback
-    const fallbackSpokenReply = "こんにちは！お声がしっかり届きましたよ。日本語の練習を続けましょう！何か質問はありますか？";
+    const fallbackSpokenReply = getWelcomeGreeting(settings.responseLanguage || settings.explanationLanguage);
     counterRef.current += 1;
     const senseiMsg: ChatMessage = {
       id: `s-${counterRef.current}`,
@@ -615,10 +813,13 @@ export default function AISenseiPage() {
     speakSenseiResponse(fallbackSpokenReply, () => {
       if (studioMode === "voice" && !isMutedRef.current) {
         setVoiceState("listening");
+        vadRef.current?.resetToListening();
         startSpeechRecognition();
       }
     });
   };
+
+  processVoiceTurnRef.current = processVoiceTurn;
 
   // --------------------------------------------------------------------------
   // Live Voice Conversation Mode Lifecyle
@@ -626,7 +827,7 @@ export default function AISenseiPage() {
   const startLiveVoiceConversation = async () => {
     setRecognitionError(null);
     setStudioMode("voice");
-    setVoiceState("thinking");
+    setVoiceState("processing");
 
     const micReady = await setupAudioAnalyser();
     if (!micReady) {
@@ -635,34 +836,11 @@ export default function AISenseiPage() {
     }
 
     // Step 2: Sensei initiates natural spoken greeting tailored to configured explanation language
-    const getWelcomeGreeting = (code: string) => {
-      switch (code) {
-        case "ta":
-          return "வணக்கம்! நான் உங்கள் ஜப்பானிய AI ஆசிரியர். இன்று என்ன பயிற்சி செய்யலாம்?";
-        case "ja":
-          return "こんにちは！日本語節のAI先生です。今日はどんな日本語について話しましょうか？";
-        case "fr":
-          return "Bonjour ! Je suis votre Sensei de japonais. Quel point souhaitez-vous pratiquer aujourd'hui ?";
-        case "es":
-          return "¡Hola! Soy tu Sensei de japonés. ¿Qué te gustaría practicar hoy?";
-        case "de":
-          return "Guten Tag! Ich bin Ihr Japanisch-Sensei. Was möchten Sie heute üben?";
-        case "hi":
-          return "नमस्ते! मैं आपका जापानी शिक्षक हूँ। आज आप क्या सीखना चाहेंगे?";
-        case "fil":
-          return "Kamusta! Ako ang iyong AI Sensei sa Nihongo. Anong aralin ang gusto mong sanayin ngayon?";
-        case "ru":
-          return "Здравствуйте! Я ваш преподаватель японского языка. Что вы хотите разобрать сегодня?";
-        case "ar":
-          return "مرحباً! أنا معلمك للغة اليابانية. ما الذي تود ممارسته اليوم؟";
-        default:
-          return "Hello! I am Nihongo AI Sensei. What Japanese concept or phrase would you like to practice today?";
-      }
-    };
     const welcomeGreeting = getWelcomeGreeting(settings.explanationLanguage);
     speakSenseiResponse(welcomeGreeting, () => {
       // Step 3: Automatically listen to student's response!
       setVoiceState("listening");
+      vadRef.current?.resetToListening();
       startSpeechRecognition();
     });
   };
@@ -673,9 +851,27 @@ export default function AISenseiPage() {
     setStudioMode("text");
   };
 
+  const forceResetVoice = () => {
+    stopAllAudio();
+    setRecognitionError(null);
+    interimTranscriptRef.current = "";
+    setLiveUserTranscript("");
+    setLiveSenseiTranscript("");
+    setVoiceState("listening");
+    if (vadRef.current) {
+      vadRef.current.resetToListening();
+    }
+    setTimeout(() => {
+      setupAudioAnalyser().then(() => {
+        startSpeechRecognition();
+      });
+    }, 200);
+  };
+
   const toggleMute = () => {
     const nextMute = !isMuted;
     setIsMuted(nextMute);
+    vadRef.current?.setMute(nextMute);
     if (nextMute) {
       if (recognitionRef.current) {
         try {
@@ -683,7 +879,7 @@ export default function AISenseiPage() {
         } catch {}
       }
     } else {
-      if (voiceState === "listening") {
+      if (voiceState === "listening" || voiceState === "speech_detected") {
         startSpeechRecognition();
       }
     }
@@ -711,13 +907,19 @@ export default function AISenseiPage() {
 
     try {
       const profile = getStudentProfile();
+      const currentHistory = messagesRef.current;
       const response = await fetch("/api/sensei", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           prompt: query,
+          messages: [...currentHistory, userMsg].slice(-10).map((m) => ({
+            role: m.sender === "user" ? "user" : "model",
+            content: m.text,
+          })),
           mode: "text",
           inputLanguage: settings.inputLanguage,
+          responseLanguage: settings.responseLanguage || settings.explanationLanguage,
           explanationLanguage: settings.explanationLanguage,
           conversationLanguage: settings.conversationLanguage,
           voiceOutputLanguage: settings.voiceOutputLanguage,
@@ -736,6 +938,13 @@ export default function AISenseiPage() {
       if (response.ok) {
         const data = await response.json();
         if (data.reply) {
+          if (data.isExplicit && data.explanationLanguage) {
+            updateSettings({
+              responseLanguage: data.explanationLanguage,
+              explanationLanguage: data.explanationLanguage,
+            });
+          }
+
           counterRef.current += 1;
           const senseiMsgId = `s-${counterRef.current}`;
           const senseiMsg: ChatMessage = {
@@ -759,7 +968,9 @@ export default function AISenseiPage() {
       let reply = "";
       const lower = query.toLowerCase();
 
-      if (lower.includes("wa") && lower.includes("ga")) {
+      if (lower.includes("fiction") || lower.includes("what is fiction")) {
+        reply = "Fiction refers to literature, stories, or creative narratives derived from imagination rather than strict historical or factual events. Examples include novels, short stories, and fables.";
+      } else if (lower.includes("wa") && lower.includes("ga")) {
         reply = KNOWLEDGE_RESPONSES.wa_ga;
       } else if (lower.includes("te") || lower.includes("te-form") || lower.includes("て")) {
         reply = KNOWLEDGE_RESPONSES.te_form;
@@ -1057,28 +1268,105 @@ Would you like to explore specific example sentences, practice verb conjugations
               <span
                 className={`w-3 h-3 rounded-full ${
                   voiceState === "listening"
-                    ? "bg-emerald-400 animate-ping"
+                    ? "bg-sky-400 animate-ping"
+                    : voiceState === "speech_detected"
+                    ? "bg-emerald-400 animate-pulse"
+                    : voiceState === "processing"
+                    ? "bg-amber-400 animate-bounce"
                     : voiceState === "speaking"
                     ? "bg-rose-500 animate-pulse"
-                    : voiceState === "thinking"
-                    ? "bg-amber-400 animate-bounce"
+                    : voiceState === "interrupted"
+                    ? "bg-amber-300 animate-ping"
+                    : voiceState === "no_speech_detected"
+                    ? "bg-slate-400"
+                    : voiceState === "error"
+                    ? "bg-red-500"
                     : "bg-gray-400"
                 }`}
               />
               <span className="text-xs font-bold tracking-wide uppercase text-[#FFFFFF]">
-                {voiceState === "listening" && "Sensei is Listening..."}
+                {voiceState === "listening" && "Sensei is Listening (Ready for your speech)"}
+                {voiceState === "speech_detected" && "Speech Detected (Listening...)"}
+                {voiceState === "processing" && "Processing Turn (Sensei is thinking...)"}
                 {voiceState === "speaking" && "Sensei is Speaking..."}
-                {voiceState === "thinking" && "Sensei is Thinking..."}
                 {voiceState === "interrupted" && "Interrupted — Listening to you"}
+                {voiceState === "no_speech_detected" && "No Speech Detected"}
                 {voiceState === "idle" && "Voice Studio Connected"}
                 {voiceState === "error" && "Voice Studio Error"}
               </span>
             </div>
 
-            <div className="flex items-center space-x-2">
-              <span className="text-[11px] text-[#E8E0D5]/70 bg-[#101C35] px-2.5 py-1.5 rounded-xl border border-[#E8E0D5]/20 font-medium hidden sm:inline-flex items-center gap-1">
-                Voice: <strong className="text-cyan-300">{activeLanguage.name}</strong>
-              </span>
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Mic Input Language Selector */}
+              <div className="flex items-center space-x-1 bg-[#101C35] px-2.5 py-1.5 rounded-xl border border-[#E8E0D5]/20 text-xs" title="Microphone Input Language">
+                <span className="text-[#E8E0D5]/60 text-[10px] font-bold uppercase">Mic:</span>
+                <select
+                  value={settings.inputLanguage}
+                  onChange={(e) => updateSettings({ inputLanguage: e.target.value })}
+                  className="bg-transparent text-cyan-300 font-semibold focus:outline-none cursor-pointer text-xs"
+                >
+                  <option value="auto" className="bg-[#101C35] text-white">Auto (Universal)</option>
+                  {UNIVERSAL_LANGUAGES.map((l) => (
+                    <option key={l.code} value={l.code} className="bg-[#101C35] text-white">
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* AI Response Language Selector */}
+              <div className="flex items-center space-x-1 bg-[#101C35] px-2.5 py-1.5 rounded-xl border border-[#E8E0D5]/20 text-xs" title="AI Sensei Response Language">
+                <span className="text-[#E8E0D5]/60 text-[10px] font-bold uppercase">Respond in:</span>
+                <select
+                  value={settings.responseLanguage || settings.explanationLanguage}
+                  onChange={(e) => updateSettings({ responseLanguage: e.target.value, explanationLanguage: e.target.value })}
+                  className="bg-transparent text-emerald-300 font-semibold focus:outline-none cursor-pointer text-xs"
+                >
+                  {UNIVERSAL_LANGUAGES.map((l) => (
+                    <option key={l.code} value={l.code} className="bg-[#101C35] text-white">
+                      {l.name} ({l.nativeName})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Spoken Voice Language Selector */}
+              <div className="flex items-center space-x-1 bg-[#101C35] px-2.5 py-1.5 rounded-xl border border-[#E8E0D5]/20 text-xs" title="Voice Audio Speech">
+                <span className="text-[#E8E0D5]/60 text-[10px] font-bold uppercase">Voice:</span>
+                <select
+                  value={settings.voiceOutputLanguage}
+                  onChange={(e) => updateSettings({ voiceOutputLanguage: e.target.value })}
+                  className="bg-transparent text-amber-300 font-semibold focus:outline-none cursor-pointer text-xs"
+                >
+                  <option value="follow_response" className="bg-[#101C35] text-white">Follow Response</option>
+                  <option value="follow_explanation" className="bg-[#101C35] text-white">Follow Explanation</option>
+                  <option value="none" className="bg-[#101C35] text-white">Mute Spoken Audio</option>
+                  {UNIVERSAL_LANGUAGES.map((l) => (
+                    <option key={l.code} value={l.code} className="bg-[#101C35] text-white">
+                      {l.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Specific Voice Engine / Speaker Selector */}
+              {availableVoices.length > 0 && (
+                <div className="flex items-center space-x-1 bg-[#101C35] px-2.5 py-1.5 rounded-xl border border-[#E8E0D5]/20 text-xs hidden lg:flex" title="Specific Voice Speaker">
+                  <span className="text-[#E8E0D5]/60 text-[10px] font-bold uppercase">Speaker:</span>
+                  <select
+                    value={settings.voiceName || "default"}
+                    onChange={(e) => updateSettings({ voiceName: e.target.value })}
+                    className="bg-transparent text-purple-300 font-semibold focus:outline-none cursor-pointer text-xs max-w-[130px] truncate"
+                  >
+                    <option value="default" className="bg-[#101C35] text-white">Default Natural</option>
+                    {availableVoices.map((v) => (
+                      <option key={v.name} value={v.name} className="bg-[#101C35] text-white">
+                        {v.name} ({v.lang})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Speed Selector */}
               <select
@@ -1087,9 +1375,9 @@ Would you like to explore specific example sentences, practice verb conjugations
                 className="bg-[#101C35] border border-[#E8E0D5]/20 text-[#FFFFFF] text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-[#C83C50]"
                 title="Speaking Speed"
               >
-                <option value={0.8}>0.8x (Beginner Pace)</option>
-                <option value={0.92}>0.9x (Natural Sensei)</option>
-                <option value={1.1}>1.1x (Fluent Native)</option>
+                <option value={0.8}>0.8x</option>
+                <option value={0.92}>0.9x</option>
+                <option value={1.1}>1.1x</option>
               </select>
             </div>
           </div>
@@ -1100,32 +1388,46 @@ Would you like to explore specific example sentences, practice verb conjugations
               {/* Concentric Reactive Glow Rings */}
               <div
                 className={`absolute w-44 h-44 rounded-full transition-all duration-700 pointer-events-none ${
-                  voiceState === "listening"
+                  voiceState === "speech_detected"
+                    ? "bg-emerald-500/25 scale-130 animate-pulse"
+                    : voiceState === "listening"
                     ? "bg-sky-500/20 scale-125 animate-pulse"
                     : voiceState === "speaking"
                     ? "bg-[#C83C50]/25 scale-135 animate-ping"
-                    : voiceState === "thinking"
-                    ? "bg-amber-500/20 scale-110"
+                    : voiceState === "processing"
+                    ? "bg-amber-500/25 scale-110 animate-pulse"
+                    : voiceState === "interrupted"
+                    ? "bg-amber-400/25 scale-120 animate-ping"
                     : "bg-[#E8E0D5]/5 scale-100"
                 }`}
               />
 
               <div
                 className={`relative w-32 h-32 rounded-full flex flex-col items-center justify-center shadow-2xl transition-all duration-500 border-2 ${
-                  voiceState === "listening"
+                  voiceState === "speech_detected"
+                    ? "bg-gradient-to-tr from-[#0F2042] to-emerald-700 border-emerald-400 text-emerald-200 shadow-emerald-500/30 scale-105"
+                    : voiceState === "listening"
                     ? "bg-gradient-to-tr from-[#0F2042] to-sky-700 border-sky-400 text-sky-200 shadow-sky-500/30 scale-105"
                     : voiceState === "speaking"
                     ? "bg-gradient-to-tr from-[#C83C50] to-rose-700 border-rose-300 text-[#FFFFFF] shadow-rose-500/40 scale-110"
-                    : voiceState === "thinking"
+                    : voiceState === "processing"
                     ? "bg-gradient-to-tr from-amber-700 to-amber-900 border-amber-400 text-amber-200 shadow-amber-500/30"
+                    : voiceState === "interrupted"
+                    ? "bg-gradient-to-tr from-amber-600 to-rose-700 border-amber-300 text-amber-100 shadow-amber-500/30"
                     : "bg-[#101C35] border-[#E8E0D5]/20 text-[#FFFFFF]"
                 }`}
               >
                 <span className="font-japanese font-black text-3xl select-none">
-                  {voiceState === "speaking" ? "先生" : voiceState === "listening" ? "聞" : "節"}
+                  {voiceState === "speaking"
+                    ? "先生"
+                    : voiceState === "speech_detected" || voiceState === "listening"
+                    ? "聞"
+                    : voiceState === "processing"
+                    ? "考"
+                    : "節"}
                 </span>
                 <span className="text-[10px] uppercase font-bold tracking-widest mt-1 opacity-80">
-                  {voiceState}
+                  {voiceState.replace(/_/g, " ")}
                 </span>
               </div>
             </div>
@@ -1141,11 +1443,14 @@ Would you like to explore specific example sentences, practice verb conjugations
             </div>
 
             <p className="text-xs text-[#E8E0D5]/80 text-center max-w-md">
-              {voiceState === "listening" && "Speak naturally into your mic. You can also interrupt Sensei anytime!"}
-              {voiceState === "speaking" && "Sensei is talking. Speak now to interrupt or click below."}
-              {voiceState === "thinking" && "Processing your Japanese inquiry..."}
-              {voiceState === "interrupted" && "Interruption detected! Listening to your new question..."}
+              {voiceState === "listening" && "Speak naturally into your mic. Sensei is listening..."}
+              {voiceState === "speech_detected" && "Voice activity detected! Speak clearly..."}
+              {voiceState === "processing" && "Sensei is processing your Japanese inquiry..."}
+              {voiceState === "speaking" && "Sensei is talking. Speak loudly or click Interrupt to jump in."}
+              {voiceState === "interrupted" && "Interruption detected! Listening to your new thought..."}
+              {voiceState === "no_speech_detected" && "No speech heard. Waiting for you to speak..."}
               {voiceState === "idle" && "Ready to talk with Sensei."}
+              {voiceState === "error" && "Microphone or connection issue. Click 'Reset Audio' below."}
             </p>
           </div>
 
@@ -1213,6 +1518,16 @@ Would you like to explore specific example sentences, practice verb conjugations
             >
               {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
               <span>{isMuted ? "Unmute Mic" : "Mute Mic"}</span>
+            </button>
+
+            {/* Force Reset / Unstick Audio Button */}
+            <button
+              onClick={forceResetVoice}
+              className="px-4 py-2.5 rounded-2xl bg-[#101C35] hover:bg-[#1A2C4E] border border-[#E8E0D5]/20 hover:border-amber-400/50 text-amber-200 text-xs font-bold flex items-center space-x-2 transition-all shadow-md"
+              title="Reset microphone & speech recognition if stuck"
+            >
+              <RotateCcw className="w-3.5 h-3.5 text-amber-400" />
+              <span>Reset Audio</span>
             </button>
 
             {/* End Voice Conversation Button */}
